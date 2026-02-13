@@ -3,11 +3,12 @@ import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
 import { ParaWalletProvider } from "../adapters/para.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
+import { pricing } from "../lib/config.js";
 
 export const walletRouter = Router();
 const wallet = new ParaWalletProvider();
 
-walletRouter.get("/balance", requireX402("$0.001"), async (req, res) => {
+walletRouter.get("/balance", requireX402(pricing.walletBalance), async (req, res) => {
   const userId = String(req.query.userId || "tg:demo");
   const snapshot = await wallet.getBalance(userId);
   return res.json({ ...snapshot, paymentReceiptId: res.getHeader("x-payment-receipt-id") });
@@ -20,7 +21,7 @@ const prepareSchema = z.object({
   to: z.string(),
 });
 
-walletRouter.post("/send/prepare", requireX402("$0.002"), async (req, res) => {
+walletRouter.post("/send/prepare", requireX402(pricing.walletSendPrepare), async (req, res) => {
   const parsed = prepareSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -52,7 +53,7 @@ const confirmSchema = z.object({
   answer: z.string(),
 });
 
-walletRouter.post("/send/confirm", requireX402("$0.002"), async (req, res) => {
+walletRouter.post("/send/confirm", requireX402(pricing.walletSendConfirm), async (req, res) => {
   const parsed = confirmSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 

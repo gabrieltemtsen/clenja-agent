@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
 import { MockOfframpProvider } from "../adapters/offramp.js";
+import { pricing } from "../lib/config.js";
 
 export const offrampRouter = Router();
 const provider = new MockOfframpProvider();
@@ -14,7 +15,7 @@ const quoteSchema = z.object({
   currency: z.enum(["NGN", "KES", "GHS", "ZAR"]),
 });
 
-offrampRouter.post("/quote", requireX402("$0.005"), async (req, res) => {
+offrampRouter.post("/quote", requireX402(pricing.offrampQuote), async (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -34,7 +35,7 @@ const createSchema = z.object({
   otp: z.string().min(4),
 });
 
-offrampRouter.post("/create", requireX402("$0.01"), async (req, res) => {
+offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 

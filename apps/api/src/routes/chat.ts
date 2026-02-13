@@ -5,6 +5,7 @@ import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { ParaWalletProvider } from "../adapters/para.js";
 import { MockOfframpProvider } from "../adapters/offramp.js";
+import { store } from "../lib/store.js";
 
 export const chatRouter = Router();
 const wallet = new ParaWalletProvider();
@@ -60,14 +61,22 @@ chatRouter.post("/confirm", async (req, res) => {
   if (ctx.kind === "send") {
     const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
     recordPolicySpend(userId, Number(ctx.amount));
+    store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
     return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
   }
 
   if (ctx.kind === "cashout") {
     const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary: { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" }, otp: answer });
     recordPolicySpend(userId, Number(ctx.amount));
+    store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
     return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
   }
 
   return res.json({ reply: "Unknown confirmation context." });
+});
+
+chatRouter.get("/receipts", (req, res) => {
+  const userId = String(req.query.userId || "");
+  if (!userId) return res.status(400).json({ error: "userId_required" });
+  return res.json({ receipts: store.listReceipts(userId) });
 });
