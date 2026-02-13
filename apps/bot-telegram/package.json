@@ -2,10 +2,14 @@
   "name": "@clenja/bot-telegram",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "node src/index.js",
     "build": "echo 'no build yet'",
     "typecheck": "echo 'no typecheck yet'",
     "lint": "echo 'todo: lint'"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
   }
 }

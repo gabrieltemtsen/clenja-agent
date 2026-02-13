@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <div className="nav">
         <Link href="/dashboard">Dashboard</Link>
         <Link href="/beneficiaries">Beneficiaries</Link>
         <Link href="/cashout-status">Cashout Status</Link>
