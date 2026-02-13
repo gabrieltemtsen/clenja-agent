@@ -14,10 +14,34 @@ type Receipt = {
   createdAt: number;
 };
 
+type Beneficiary = {
+  id: string;
+  userId: string;
+  country: string;
+  bankName: string;
+  accountName: string;
+  accountNumberMasked: string;
+  accountNumberLast4: string;
+  createdAt: number;
+};
+
+type CashoutOrder = {
+  payoutId: string;
+  userId: string;
+  status: "pending" | "processing" | "settled" | "failed";
+  amount: string;
+  token: string;
+  beneficiaryId?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
   receipts: Receipt[];
+  beneficiaries: Beneficiary[];
+  cashouts: CashoutOrder[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -25,7 +49,7 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
@@ -64,5 +88,35 @@ export const store = {
   },
   listReceipts(userId: string) {
     return readDb().receipts.filter((r) => r.userId === userId);
+  },
+  addBeneficiary(b: Beneficiary) {
+    const db = readDb();
+    db.beneficiaries.unshift(b);
+    db.beneficiaries = db.beneficiaries.slice(0, 5000);
+    writeDb(db);
+  },
+  listBeneficiaries(userId: string) {
+    return readDb().beneficiaries.filter((b) => b.userId === userId);
+  },
+  addCashout(order: CashoutOrder) {
+    const db = readDb();
+    db.cashouts.unshift(order);
+    db.cashouts = db.cashouts.slice(0, 5000);
+    writeDb(db);
+  },
+  updateCashoutStatus(payoutId: string, status: CashoutOrder["status"]) {
+    const db = readDb();
+    const c = db.cashouts.find((x) => x.payoutId === payoutId);
+    if (!c) return null;
+    c.status = status;
+    c.updatedAt = Date.now();
+    writeDb(db);
+    return c;
+  },
+  getCashout(payoutId: string) {
+    return readDb().cashouts.find((x) => x.payoutId === payoutId);
+  },
+  listCashouts(userId: string) {
+    return readDb().cashouts.filter((x) => x.userId === userId);
   }
 };

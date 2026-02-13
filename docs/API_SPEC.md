@@ -115,3 +115,14 @@ Agentic natural-language entrypoint.
 Completes challenge-based actions.
 - `new_recipient_last4` for sends
 - `cashout_otp` for cashout
+
+## Beneficiaries
+- `POST /beneficiaries` save beneficiary
+- `GET /beneficiaries?userId=...` list saved beneficiaries
+
+## Offramp status
+- `GET /offramp/status/:payoutId` get payout status
+- `POST /offramp/status/:payoutId` update payout status (mock lifecycle)
+
+## Dashboard hooks
+- `GET /dashboard/overview?userId=...` returns `{ balance, receipts, cashouts }`
