@@ -2,6 +2,8 @@ import "dotenv/config";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API_BASE = process.env.CLENJA_API_BASE || "http://localhost:8787";
+const MODE = (process.env.TELEGRAM_MODE || "polling").toLowerCase();
+const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL;
 
 if (!BOT_TOKEN) {
   console.error("[clenja-bot] TELEGRAM_BOT_TOKEN missing");
@@ -78,5 +80,18 @@ async function poll() {
   }
 }
 
-console.log("[clenja-bot] telegram polling started");
-poll();
+async function setupWebhook() {
+  if (!WEBHOOK_URL) {
+    console.error("[clenja-bot] TELEGRAM_WEBHOOK_URL is required when TELEGRAM_MODE=webhook");
+    process.exit(1);
+  }
+  const r = await tg("setWebhook", { url: WEBHOOK_URL });
+  console.log("[clenja-bot] webhook set:", r.ok ? "ok" : r);
+}
+
+if (MODE === "webhook") {
+  setupWebhook();
+} else {
+  console.log("[clenja-bot] telegram polling started");
+  poll();
+}
