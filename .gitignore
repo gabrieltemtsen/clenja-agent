@@ -6,4 +6,5 @@ node_modules/
 dist/
 .next/
 coverage/
+submission-pack/
 .DS_Store
