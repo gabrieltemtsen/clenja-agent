@@ -7,13 +7,18 @@ import { Card, ErrorText, Hint } from "../components";
 export default function DashboardPage() {
   const [userId, setUserId] = useState("tg:123");
   const [data, setData] = useState<any>(null);
+  const [readiness, setReadiness] = useState<any>(null);
   const [err, setErr] = useState("");
 
   async function load() {
     setErr("");
     try {
-      const d = await getJson<any>(`/v1/dashboard/overview?userId=${encodeURIComponent(userId)}`);
+      const [d, r] = await Promise.all([
+        getJson<any>(`/v1/dashboard/overview?userId=${encodeURIComponent(userId)}`),
+        getJson<any>(`/v1/readiness`),
+      ]);
       setData(d);
+      setReadiness(r);
     } catch (e: any) {
       setErr(e.message);
     }
@@ -28,6 +33,7 @@ export default function DashboardPage() {
         <Hint text="Use this for judge demo to show wallet + receipts + cashouts in one shot." />
       </Card>
       <ErrorText text={err} />
+      {readiness && <Card title="System Readiness"><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(readiness, null, 2)}</pre></Card>}
       {data && <Card title="Response"><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(data, null, 2)}</pre></Card>}
     </main>
   );

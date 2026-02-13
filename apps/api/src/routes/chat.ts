@@ -19,6 +19,7 @@ chatRouter.post("/message", async (req, res) => {
 
   const { userId, text } = parsed.data;
   const intent = parseIntent(text);
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind } });
 
   if (intent.kind === "balance") {
     const b = await wallet.getBalance(userId);
@@ -27,7 +28,10 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "send") {
     const pc = checkPolicy({ userId, action: "send", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD", recipient: intent.to });
-    if (!pc.ok) return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    if (!pc.ok) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.blocked", status: "error", detail: { reason: pc.reason } });
+      return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    }
 
     const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: intent.to });
     const last4 = intent.to.slice(-4);
@@ -37,7 +41,10 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "cashout") {
     const pc = checkPolicy({ userId, action: "cashout", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD" });
-    if (!pc.ok) return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    if (!pc.ok) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.blocked", status: "error", detail: { reason: pc.reason } });
+      return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    }
 
     const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: "NG", currency: "NGN" });
     const otp = "123456";
@@ -55,13 +62,17 @@ chatRouter.post("/confirm", async (req, res) => {
   const { userId, challengeId, answer } = parsed.data;
 
   const vr = verifyChallenge(challengeId, answer);
-  if (!vr.ok) return res.json({ reply: `Confirmation failed: ${vr.reason}` });
+  if (!vr.ok) {
+    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.confirm", status: "error", detail: { reason: vr.reason } });
+    return res.json({ reply: `Confirmation failed: ${vr.reason}` });
+  }
 
   const ctx = vr.challenge.context as any;
   if (ctx.kind === "send") {
     const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
     recordPolicySpend(userId, Number(ctx.amount));
     store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
+    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
     return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
   }
 
@@ -69,6 +80,7 @@ chatRouter.post("/confirm", async (req, res) => {
     const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary: { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" }, otp: answer });
     recordPolicySpend(userId, Number(ctx.amount));
     store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
+    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
     return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
   }
 
