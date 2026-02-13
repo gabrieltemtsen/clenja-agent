@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getJson } from "../lib/api";
+import { Card, ErrorText, Hint } from "../components";
 
 export default function DashboardPage() {
   const [userId, setUserId] = useState("tg:123");
@@ -21,10 +22,13 @@ export default function DashboardPage() {
   return (
     <main>
       <h2>Dashboard</h2>
-      <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="userId" />
-      <button onClick={load} style={{ marginLeft: 8 }}>Load</button>
-      {err && <p style={{ color: "#ff8080" }}>{err}</p>}
-      {data && <pre style={{ whiteSpace: "pre-wrap", background: "#11182f", padding: 12, borderRadius: 8 }}>{JSON.stringify(data, null, 2)}</pre>}
+      <Card title="Overview Loader">
+        <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="userId" />
+        <button onClick={load} style={{ marginLeft: 8 }}>Load</button>
+        <Hint text="Use this for judge demo to show wallet + receipts + cashouts in one shot." />
+      </Card>
+      <ErrorText text={err} />
+      {data && <Card title="Response"><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(data, null, 2)}</pre></Card>}
     </main>
   );
 }
