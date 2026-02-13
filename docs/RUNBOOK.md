@@ -19,3 +19,5 @@ cd apps/api
 - Without x402 env configured, paid endpoints return `503 x402_not_configured`.
 - With x402 configured but no payment header, endpoints return `402 Payment Required`.
 - `x-payment` header is accepted for test clients.
+- Para adapter supports `PARA_MODE=mock|live`. In `live`, API calls use `PARA_API_BASE` + `PARA_API_KEY`.
+- State is persisted in `STATE_DB_PATH` (default `./.data/state.json`).
