@@ -2,6 +2,7 @@ export type Intent =
   | { kind: "balance" }
   | { kind: "history" }
   | { kind: "status" }
+  | { kind: "help" }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
   | { kind: "unknown"; raw: string };
@@ -15,6 +16,7 @@ function normalizeToken(token: string): "cUSD" | "CELO" {
 
 export function parseIntent(text: string): Intent {
   const t = text.trim();
+  if (/help|what can you do|commands/i.test(t)) return { kind: "help" };
   if (/balance|what'?s my balance|my balance/i.test(t)) return { kind: "balance" };
   if (/history|my transactions|receipts/i.test(t)) return { kind: "history" };
   if (/status|system status|readiness/i.test(t)) return { kind: "status" };

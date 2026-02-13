@@ -12,6 +12,12 @@ export const chatRouter = Router();
 const wallet = new ParaWalletProvider();
 const offramp = new LiveOfframpProvider();
 
+function fuzzyIncludes(a: string, b: string) {
+  const aa = a.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const bb = b.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return aa.includes(bb) || bb.includes(aa);
+}
+
 const chatSchema = z.object({ userId: z.string(), text: z.string() });
 
 chatRouter.post("/message", async (req, res) => {
@@ -21,11 +27,22 @@ chatRouter.post("/message", async (req, res) => {
   const { userId, text } = parsed.data;
   const rl = checkRateLimit(`chat:${userId}`);
   if (!rl.ok) {
+    res.setHeader("x-ratelimit-limit", "20");
+    res.setHeader("x-ratelimit-remaining", "0");
+    res.setHeader("retry-after", String(Math.ceil(rl.retryAfterMs / 1000)));
     return res.status(429).json({ reply: `Too many requests. Try again in ${Math.ceil(rl.retryAfterMs / 1000)}s.` });
   }
+  res.setHeader("x-ratelimit-limit", "20");
+  res.setHeader("x-ratelimit-remaining", String(rl.remaining));
 
   const intent = parseIntent(text);
   store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind } });
+
+  if (intent.kind === "help") {
+    return res.json({
+      reply: "I can do: balance, history, status, send, and cashout. Examples: 'send 5 cUSD to 0xabc1234', 'cashout 50 cUSD', 'cashout 50 cUSD to Gabriel'."
+    });
+  }
 
   if (intent.kind === "balance") {
     const b = await wallet.getBalance(userId);
@@ -63,9 +80,14 @@ chatRouter.post("/message", async (req, res) => {
 
     let beneficiary: { country: string; bankName: string; accountName: string; accountNumber: string } | undefined;
     if (intent.beneficiaryName) {
-      const found = store.listBeneficiaries(userId).find((b) => b.accountName.toLowerCase().includes(intent.beneficiaryName!.toLowerCase()));
-      if (found) {
+      const matches = store.listBeneficiaries(userId).filter((b) => fuzzyIncludes(b.accountName, intent.beneficiaryName!));
+      if (matches.length === 1) {
+        const found = matches[0];
         beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked };
+      } else if (matches.length > 1) {
+        return res.json({ reply: `I found multiple beneficiaries for '${intent.beneficiaryName}': ${matches.map((m) => m.accountName).join(", ")}. Please be more specific.` });
+      } else {
+        return res.json({ reply: `No beneficiary found for '${intent.beneficiaryName}'. Save one in /beneficiaries first.` });
       }
     }
 
