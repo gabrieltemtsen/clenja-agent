@@ -7,6 +7,7 @@ import { ParaWalletProvider } from "../adapters/para.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
+import { toUserFacingProviderError } from "../lib/providerErrors.js";
 
 export const chatRouter = Router();
 const wallet = new ParaWalletProvider();
@@ -45,8 +46,12 @@ chatRouter.post("/message", async (req, res) => {
   }
 
   if (intent.kind === "balance") {
-    const b = await wallet.getBalance(userId);
-    return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+    try {
+      const b = await wallet.getBalance(userId);
+      return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+    }
   }
 
   if (intent.kind === "history") {
@@ -65,10 +70,14 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: `Blocked by policy: ${pc.reason}` });
     }
 
-    const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: intent.to });
-    const last4 = intent.to.slice(-4);
-    const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
-    return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+    try {
+      const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: intent.to });
+      const last4 = intent.to.slice(-4);
+      const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
+      return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+    }
   }
 
   if (intent.kind === "cashout") {
@@ -91,10 +100,14 @@ chatRouter.post("/message", async (req, res) => {
       }
     }
 
-    const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: beneficiary?.country as any || "NG", currency: "NGN" });
-    const otp = "123456";
-    const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
-    return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN. Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+    try {
+      const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: beneficiary?.country as any || "NG", currency: "NGN" });
+      const otp = "123456";
+      const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
+      return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN. Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+    }
   }
 
   return res.json({ reply: "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
