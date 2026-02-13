@@ -19,6 +19,31 @@ async function tg(method, payload) {
   return r.json();
 }
 
+function idemKey(userId, text) {
+  const base = `${userId}:${text}:${new Date().toISOString().slice(0, 16)}`;
+  return Buffer.from(base).toString("base64url").slice(0, 48);
+}
+
+async function apiCall(endpoint, payload, idempotencyKeyValue) {
+  const r = await fetch(`${API_BASE}${endpoint}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(idempotencyKeyValue ? { "idempotency-key": idempotencyKeyValue } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let data = {};
+  try {
+    data = await r.json();
+  } catch {
+    data = { reply: "Unexpected response from API." };
+  }
+
+  return { status: r.status, data, headers: r.headers };
+}
+
 async function sendMessage(chatId, text, replyToMessageId) {
   return tg("sendMessage", {
     chat_id: chatId,
@@ -35,30 +60,46 @@ async function handleUpdate(update) {
   const text = msg.text.trim();
 
   if (text === "/start") {
-    await sendMessage(msg.chat.id, "CLENJA is live ✅\nTry: 'balance', 'send 5 cUSD to 0xabc1234', or 'cashout 50 cUSD'.", msg.message_id);
+    await sendMessage(msg.chat.id, "CLENJA is live ✅\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD", msg.message_id);
+    return;
+  }
+
+  if (text === "/help") {
+    await sendMessage(
+      msg.chat.id,
+      "Available:\n• balance\n• history\n• status\n• send <amount> <cUSD|CELO> to <address>\n• cashout <amount> <cUSD|CELO>\n• confirm <challengeId> <answer>",
+      msg.message_id,
+    );
     return;
   }
 
   const endpoint = text.startsWith("confirm ") ? "/v1/chat/confirm" : "/v1/chat/message";
   const payload = text.startsWith("confirm ")
     ? (() => {
-        const [_, challengeId, answer] = text.split(/\s+/);
+        const parts = text.split(/\s+/);
+        const challengeId = parts[1];
+        const answer = parts.slice(2).join(" ");
         return { userId, challengeId, answer };
       })()
     : { userId, text };
 
   try {
-    const r = await fetch(`${API_BASE}${endpoint}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const key = endpoint.includes("confirm") ? idemKey(userId, text) : undefined;
+    const { status, data, headers } = await apiCall(endpoint, payload, key);
+    const reply = data.reply || (status >= 400 ? "Request failed." : "Done.");
 
-    const data = await r.json();
-    const reply = data.reply || "Done.";
-    const extra = data.challengeId ? `\n\nChallenge ID: ${data.challengeId}\nReply: confirm <challengeId> <answer>` : "";
+    const extra = data.challengeId
+      ? `\n\nChallenge ID: ${data.challengeId}\nReply: confirm ${data.challengeId} <answer>`
+      : "";
+
+    if (status === 429) {
+      const retry = headers.get("retry-after") || "30";
+      await sendMessage(msg.chat.id, `⏳ Rate limited. Retry in ~${retry}s.`, msg.message_id);
+      return;
+    }
+
     await sendMessage(msg.chat.id, `${reply}${extra}`, msg.message_id);
-  } catch (e) {
+  } catch {
     await sendMessage(msg.chat.id, "Service error. Please try again in a moment.", msg.message_id);
   }
 }
