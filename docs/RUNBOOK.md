@@ -15,6 +15,17 @@ cd apps/api
 ./scripts/test-endpoints.sh
 ```
 
+## 3) Start web console
+```bash
+cd apps/web
+pnpm dev
+```
+Then open `http://localhost:3000` and use:
+- `/dashboard`
+- `/beneficiaries`
+- `/cashout-status`
+- `/agent` (chat + confirm playground)
+
 ## Notes
 - Without x402 env configured, paid endpoints return `503 x402_not_configured`.
 - With x402 configured but no payment header, endpoints return `402 Payment Required`.
