@@ -1,15 +1,14 @@
-export default function Page() {
+import Link from "next/link";
+
+export default function HomePage() {
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: 24 }}>
-      <h1>CLENJA Agent</h1>
-      <p>Chat-native Celo wallet, payments, coop credit, and Africa-first cashout.</p>
-      <h2>Infra APIs (x402)</h2>
-      <ul>
-        <li>GET /v1/wallet/balance</li>
-        <li>POST /v1/wallet/send/prepare</li>
-        <li>POST /v1/offramp/quote</li>
-        <li>POST /v1/offramp/create</li>
-      </ul>
+    <main>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/beneficiaries">Beneficiaries</Link>
+        <Link href="/cashout-status">Cashout Status</Link>
+      </div>
+      <p style={{ marginTop: 16 }}>Use this UI for demoing user balances, receipts, beneficiaries, and payout lifecycle.</p>
     </main>
   );
 }
