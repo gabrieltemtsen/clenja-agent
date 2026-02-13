@@ -6,6 +6,7 @@ import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { ParaWalletProvider } from "../adapters/para.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
 
 export const chatRouter = Router();
 const wallet = new ParaWalletProvider();
@@ -18,12 +19,26 @@ chatRouter.post("/message", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const { userId, text } = parsed.data;
+  const rl = checkRateLimit(`chat:${userId}`);
+  if (!rl.ok) {
+    return res.status(429).json({ reply: `Too many requests. Try again in ${Math.ceil(rl.retryAfterMs / 1000)}s.` });
+  }
+
   const intent = parseIntent(text);
   store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind } });
 
   if (intent.kind === "balance") {
     const b = await wallet.getBalance(userId);
-    return res.json({ reply: `Your balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+    return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+  }
+
+  if (intent.kind === "history") {
+    const receipts = store.listReceipts(userId).slice(0, 10);
+    return res.json({ reply: `🧾 Found ${receipts.length} recent records.`, receipts });
+  }
+
+  if (intent.kind === "status") {
+    return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
   }
 
   if (intent.kind === "send") {
@@ -43,13 +58,21 @@ chatRouter.post("/message", async (req, res) => {
     const pc = checkPolicy({ userId, action: "cashout", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD" });
     if (!pc.ok) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.blocked", status: "error", detail: { reason: pc.reason } });
-      return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+      return res.json({ reply: `❌ Blocked by policy: ${pc.reason}` });
     }
 
-    const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: "NG", currency: "NGN" });
+    let beneficiary: { country: string; bankName: string; accountName: string; accountNumber: string } | undefined;
+    if (intent.beneficiaryName) {
+      const found = store.listBeneficiaries(userId).find((b) => b.accountName.toLowerCase().includes(intent.beneficiaryName!.toLowerCase()));
+      if (found) {
+        beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked };
+      }
+    }
+
+    const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: beneficiary?.country as any || "NG", currency: "NGN" });
     const otp = "123456";
-    const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token } });
-    return res.json({ reply: `Cashout quote ready. Receive ${quote.receiveAmount} NGN. Confirm with OTP 123456 (mock).`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+    const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
+    return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN. Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
   }
 
   return res.json({ reply: "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
@@ -77,7 +100,8 @@ chatRouter.post("/confirm", async (req, res) => {
   }
 
   if (ctx.kind === "cashout") {
-    const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary: { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" }, otp: answer });
+    const beneficiary = ctx.beneficiary || { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" };
+    const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary, otp: answer });
     recordPolicySpend(userId, Number(ctx.amount));
     store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
     store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
