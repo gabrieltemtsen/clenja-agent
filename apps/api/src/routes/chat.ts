@@ -1,0 +1,73 @@
+import { Router } from "express";
+import { z } from "zod";
+import { parseIntent } from "../lib/intents.js";
+import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
+import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
+import { ParaWalletProvider } from "../adapters/para.js";
+import { MockOfframpProvider } from "../adapters/offramp.js";
+
+export const chatRouter = Router();
+const wallet = new ParaWalletProvider();
+const offramp = new MockOfframpProvider();
+
+const chatSchema = z.object({ userId: z.string(), text: z.string() });
+
+chatRouter.post("/message", async (req, res) => {
+  const parsed = chatSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const { userId, text } = parsed.data;
+  const intent = parseIntent(text);
+
+  if (intent.kind === "balance") {
+    const b = await wallet.getBalance(userId);
+    return res.json({ reply: `Your balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+  }
+
+  if (intent.kind === "send") {
+    const pc = checkPolicy({ userId, action: "send", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD", recipient: intent.to });
+    if (!pc.ok) return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+
+    const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: intent.to });
+    const last4 = intent.to.slice(-4);
+    const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
+    return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+  }
+
+  if (intent.kind === "cashout") {
+    const pc = checkPolicy({ userId, action: "cashout", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD" });
+    if (!pc.ok) return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+
+    const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: "NG", currency: "NGN" });
+    const otp = "123456";
+    const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token } });
+    return res.json({ reply: `Cashout quote ready. Receive ${quote.receiveAmount} NGN. Confirm with OTP 123456 (mock).`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+  }
+
+  return res.json({ reply: "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
+});
+
+const confirmSchema = z.object({ userId: z.string(), challengeId: z.string(), answer: z.string() });
+chatRouter.post("/confirm", async (req, res) => {
+  const parsed = confirmSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { userId, challengeId, answer } = parsed.data;
+
+  const vr = verifyChallenge(challengeId, answer);
+  if (!vr.ok) return res.json({ reply: `Confirmation failed: ${vr.reason}` });
+
+  const ctx = vr.challenge.context as any;
+  if (ctx.kind === "send") {
+    const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
+    recordPolicySpend(userId, Number(ctx.amount));
+    return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
+  }
+
+  if (ctx.kind === "cashout") {
+    const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary: { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" }, otp: answer });
+    recordPolicySpend(userId, Number(ctx.amount));
+    return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
+  }
+
+  return res.json({ reply: "Unknown confirmation context." });
+});

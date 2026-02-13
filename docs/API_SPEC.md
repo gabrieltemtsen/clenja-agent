@@ -105,3 +105,13 @@ Creates payout order after confirmation.
   "paymentReceiptId": "x402_rcpt_..."
 }
 ```
+
+## POST `/chat/message`
+Agentic natural-language entrypoint.
+- Parses intents (`balance`, `send`, `cashout`)
+- Returns confirmation challenge for risky actions
+
+## POST `/chat/confirm`
+Completes challenge-based actions.
+- `new_recipient_last4` for sends
+- `cashout_otp` for cashout
