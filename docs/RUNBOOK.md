@@ -39,4 +39,7 @@ REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..
 - With x402 configured but no payment header, endpoints return `402 Payment Required`.
 - `x-payment` header is accepted for test clients.
 - Para adapter supports `PARA_MODE=mock|live`. In `live`, API calls use `PARA_API_BASE` + `PARA_API_KEY`.
+- You can customize Para endpoint paths with `PARA_EP_*` env variables.
+- Para live mode supports timeout (`PARA_TIMEOUT_MS`) and fallback behavior (`PARA_FALLBACK_TO_MOCK_ON_ERROR`).
+- Check readiness with `GET /v1/readiness`.
 - State is persisted in `STATE_DB_PATH` (default `./.data/state.json`).
