@@ -36,12 +36,30 @@ type CashoutOrder = {
   updatedAt: number;
 };
 
+type AuditEvent = {
+  id: string;
+  ts: number;
+  userId?: string;
+  action: string;
+  status: "ok" | "error";
+  detail?: Record<string, unknown>;
+};
+
+type IdempotencyRecord = {
+  key: string;
+  action: string;
+  response: unknown;
+  createdAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
   receipts: Receipt[];
   beneficiaries: Beneficiary[];
   cashouts: CashoutOrder[];
+  audit: AuditEvent[];
+  idempotency: IdempotencyRecord[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -49,14 +67,23 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
 
 function readDb(): DbShape {
   ensureFile();
-  return JSON.parse(readFileSync(DB_PATH, "utf8")) as DbShape;
+  const parsed = JSON.parse(readFileSync(DB_PATH, "utf8")) as Partial<DbShape>;
+  return {
+    challenges: parsed.challenges ?? {},
+    policySpent: parsed.policySpent ?? {},
+    receipts: parsed.receipts ?? [],
+    beneficiaries: parsed.beneficiaries ?? [],
+    cashouts: parsed.cashouts ?? [],
+    audit: parsed.audit ?? [],
+    idempotency: parsed.idempotency ?? [],
+  };
 }
 
 function writeDb(data: DbShape) {
@@ -118,5 +145,24 @@ export const store = {
   },
   listCashouts(userId: string) {
     return readDb().cashouts.filter((x) => x.userId === userId);
+  },
+  addAudit(event: AuditEvent) {
+    const db = readDb();
+    db.audit.unshift(event);
+    db.audit = db.audit.slice(0, 5000);
+    writeDb(db);
+  },
+  listAudit(userId?: string) {
+    const list = readDb().audit;
+    return userId ? list.filter((x) => x.userId === userId) : list;
+  },
+  getIdempotency(action: string, key: string) {
+    return readDb().idempotency.find((x) => x.action === action && x.key === key);
+  },
+  putIdempotency(record: IdempotencyRecord) {
+    const db = readDb();
+    db.idempotency.unshift(record);
+    db.idempotency = db.idempotency.slice(0, 5000);
+    writeDb(db);
   }
 };

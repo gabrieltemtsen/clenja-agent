@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CashoutQuoteRequest, CashoutQuoteResponse, CreatePayoutRequest } from "../lib/types.js";
-import { offrampConfig } from "../lib/config.js";
+import { offrampConfig, safetyConfig } from "../lib/config.js";
 
 export interface OfframpProvider {
   quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse>;
@@ -16,6 +16,12 @@ function setLiveStatus(ok: boolean, err?: string) {
 
 export function getOfframpLiveStatus() {
   return liveStatus;
+}
+
+function assertLiveConfig() {
+  if (offrampConfig.mode === "live" && (!offrampConfig.apiBase || !offrampConfig.apiKey) && safetyConfig.strictLiveMode) {
+    throw new Error("offramp_live_strict_config_missing");
+  }
 }
 
 async function offrampRequest(path: string, body: unknown) {
@@ -72,6 +78,7 @@ export class LiveOfframpProvider implements OfframpProvider {
   private fallback = new MockOfframpProvider();
 
   async quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse> {
+    assertLiveConfig();
     if (offrampConfig.mode !== "live") return this.fallback.quote(input);
     try {
       const data = await offrampRequest(offrampConfig.endpoints.quote, input);
@@ -89,6 +96,7 @@ export class LiveOfframpProvider implements OfframpProvider {
   }
 
   async create(input: CreatePayoutRequest) {
+    assertLiveConfig();
     if (offrampConfig.mode !== "live") return this.fallback.create(input);
     try {
       const data = await offrampRequest(offrampConfig.endpoints.create, input);

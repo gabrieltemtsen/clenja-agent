@@ -127,6 +127,10 @@ Completes challenge-based actions.
 ## Dashboard hooks
 - `GET /dashboard/overview?userId=...` returns `{ balance, receipts, cashouts }`
 
+## Ops + readiness
+- `GET /readiness`
+- `GET /audit?userId=...` (optional user filter)
+
 ## Agent chat orchestration
 - `POST /chat/message` accepts `{ userId, text }`
 - `POST /chat/confirm` accepts `{ userId, challengeId, answer }`

@@ -32,3 +32,7 @@ export const offrampConfig = {
     status: process.env.OFFRAMP_EP_STATUS || "/offramp/status",
   }
 };
+
+export const safetyConfig = {
+  strictLiveMode: (process.env.STRICT_LIVE_MODE || "false").toLowerCase() === "true",
+};

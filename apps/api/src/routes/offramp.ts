@@ -21,6 +21,7 @@ offrampRouter.post("/quote", requireX402(pricing.offrampQuote), async (req, res)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const quote = await provider.quote(parsed.data);
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: parsed.data.userId, action: "offramp.quote", status: "ok", detail: { amount: parsed.data.amount, token: parsed.data.fromToken, country: parsed.data.country } });
   return res.json({ ...quote, paymentReceiptId: res.getHeader("x-payment-receipt-id") });
 });
 
@@ -40,6 +41,12 @@ const createSchema = z.object({
 offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const idemKey = String(req.header("idempotency-key") || "");
+  if (idemKey) {
+    const prior = store.getIdempotency("offramp.create", idemKey);
+    if (prior) return res.json(prior.response);
+  }
 
   const payload = parsed.data;
   let beneficiary = payload.beneficiary;
@@ -69,7 +76,11 @@ offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, re
     updatedAt: Date.now(),
   });
 
-  return res.json({ ...order, paymentReceiptId: res.getHeader("x-payment-receipt-id") });
+  const response = { ...order, paymentReceiptId: res.getHeader("x-payment-receipt-id") };
+  if (idemKey) store.putIdempotency({ key: idemKey, action: "offramp.create", response, createdAt: Date.now() });
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: payload.userId, action: "offramp.create", status: "ok", detail: { payoutId: order.payoutId, beneficiaryId: payload.beneficiaryId ?? "inline" } });
+
+  return res.json(response);
 });
 
 offrampRouter.get("/status/:payoutId", requireX402(pricing.offrampQuote), async (req, res) => {
@@ -85,7 +96,22 @@ offrampRouter.post("/status/:payoutId", requireX402(pricing.offrampCreate), asyn
   if (!["pending", "processing", "settled", "failed"].includes(status)) {
     return res.status(400).json({ error: "invalid_status" });
   }
+
+  const current = store.getCashout(payoutId);
+  if (!current) return res.status(404).json({ error: "not_found" });
+
+  const allowed: Record<string, string[]> = {
+    pending: ["processing", "failed"],
+    processing: ["settled", "failed"],
+    settled: [],
+    failed: [],
+  };
+  if (!allowed[current.status].includes(status)) {
+    return res.status(400).json({ error: "invalid_transition", from: current.status, to: status });
+  }
+
   const updated = store.updateCashoutStatus(payoutId, status as "pending" | "processing" | "settled" | "failed");
   if (!updated) return res.status(404).json({ error: "not_found" });
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: updated.userId, action: "offramp.status.update", status: "ok", detail: { payoutId, from: current.status, to: status } });
   return res.json({ payoutId: updated.payoutId, status: updated.status, updatedAt: updated.updatedAt });
 });

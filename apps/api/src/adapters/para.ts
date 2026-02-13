@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult } from "./wallet.js";
-import { paraConfig } from "../lib/config.js";
+import { paraConfig, safetyConfig } from "../lib/config.js";
 
 type ParaLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
 let liveStatus: ParaLiveStatus = { mode: paraConfig.mode === "live" ? "live" : "mock", healthy: paraConfig.mode !== "live" };
@@ -46,8 +46,15 @@ function mockAddress(userId: string) {
   return `0xpara_${userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20)}`;
 }
 
+function assertLiveConfig() {
+  if (paraConfig.mode === "live" && (!paraConfig.apiBase || !paraConfig.apiKey) && safetyConfig.strictLiveMode) {
+    throw new Error("para_live_strict_config_missing");
+  }
+}
+
 export class ParaWalletProvider implements WalletProvider {
   async createOrLinkUserWallet(userId: string) {
+    assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
         const data = await paraRequest(paraConfig.endpoints.createOrLink, { userId, chain: "celo" });
@@ -60,6 +67,7 @@ export class ParaWalletProvider implements WalletProvider {
   }
 
   async getBalance(userId: string): Promise<WalletBalance> {
+    assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
         const data = await paraRequest(paraConfig.endpoints.balance, { userId, chain: "celo" });
@@ -83,6 +91,7 @@ export class ParaWalletProvider implements WalletProvider {
   }
 
   async prepareSend(input: PrepareSendInput): Promise<PrepareSendResult> {
+    assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
         const data = await paraRequest(paraConfig.endpoints.sendPrepare, input);
@@ -103,6 +112,7 @@ export class ParaWalletProvider implements WalletProvider {
   }
 
   async executeSend(input: { userId: string; quoteId: string; to: string; token: "CELO" | "cUSD"; amount: string }) {
+    assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
         const data = await paraRequest(paraConfig.endpoints.sendExecute, input);

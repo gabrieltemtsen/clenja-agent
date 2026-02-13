@@ -4,6 +4,7 @@ import { requireX402 } from "../middleware/x402.js";
 import { ParaWalletProvider } from "../adapters/para.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { pricing } from "../lib/config.js";
+import { store } from "../lib/store.js";
 
 export const walletRouter = Router();
 const wallet = new ParaWalletProvider();
@@ -23,7 +24,10 @@ const prepareSchema = z.object({
 
 walletRouter.post("/send/prepare", requireX402(pricing.walletSendPrepare), async (req, res) => {
   const parsed = prepareSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) {
+    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), action: "wallet.send.prepare", status: "error", detail: { reason: "validation_error" } });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
 
   const q = await wallet.prepareSend(parsed.data);
   const expectedLast4 = parsed.data.to.slice(-4);
@@ -33,6 +37,8 @@ walletRouter.post("/send/prepare", requireX402(pricing.walletSendPrepare), async
     expected: expectedLast4,
     context: { ...parsed.data, quoteId: q.quoteId },
   });
+
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: parsed.data.fromUserId, action: "wallet.send.prepare", status: "ok", detail: { to: parsed.data.to, amount: parsed.data.amount, token: parsed.data.token, challengeId: ch.id } });
 
   return res.json({
     ...q,
@@ -57,15 +63,29 @@ walletRouter.post("/send/confirm", requireX402(pricing.walletSendConfirm), async
   const parsed = confirmSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+  const idemKey = String(req.header("idempotency-key") || "");
+  if (idemKey) {
+    const prior = store.getIdempotency("wallet.send.confirm", idemKey);
+    if (prior) return res.json(prior.response);
+  }
+
   const vr = verifyChallenge(parsed.data.challengeId, parsed.data.answer);
-  if (!vr.ok) return res.status(400).json({ error: `challenge_${vr.reason}` });
+  if (!vr.ok) {
+    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: parsed.data.userId, action: "wallet.send.confirm", status: "error", detail: { reason: vr.reason } });
+    return res.status(400).json({ error: `challenge_${vr.reason}` });
+  }
 
   const c = vr.challenge.context as { quoteId: string; to: string; token: "CELO" | "cUSD"; amount: string };
   const tx = await wallet.executeSend({ userId: parsed.data.userId, quoteId: c.quoteId, to: c.to, token: c.token, amount: c.amount });
 
-  return res.json({
+  const response = {
     status: "submitted",
     txHash: tx.txHash,
     paymentReceiptId: res.getHeader("x-payment-receipt-id"),
-  });
+  };
+
+  if (idemKey) store.putIdempotency({ key: idemKey, action: "wallet.send.confirm", response, createdAt: Date.now() });
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId: parsed.data.userId, action: "wallet.send.confirm", status: "ok", detail: { txHash: tx.txHash, amount: c.amount, token: c.token } });
+
+  return res.json(response);
 });

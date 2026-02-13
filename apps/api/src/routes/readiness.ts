@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { offrampConfig, paraConfig, pricing } from "../lib/config.js";
+import { offrampConfig, paraConfig, pricing, safetyConfig } from "../lib/config.js";
 import { getParaLiveStatus } from "../adapters/para.js";
 import { getOfframpLiveStatus } from "../adapters/offramp.js";
 
@@ -35,6 +35,7 @@ readinessRouter.get("/readiness", (_req, res) => {
       endpoints: offrampConfig.endpoints,
       liveStatus: getOfframpLiveStatus(),
     },
+    safety: safetyConfig,
     pricing,
   });
 });
