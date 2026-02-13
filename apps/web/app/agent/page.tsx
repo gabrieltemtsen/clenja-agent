@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { postJson } from "../lib/api";
+import { Card, ErrorText, Hint } from "../components";
 
 export default function AgentPage() {
   const [userId, setUserId] = useState("tg:123");
@@ -35,23 +36,25 @@ export default function AgentPage() {
   return (
     <main>
       <h2>Agent Chat Playground</h2>
-      <p>Test natural-language actions and confirmation flow from web.</p>
+      <Card title="Step 1: Send natural-language message">
+        <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
+          <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="userId" />
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="message" />
+        </div>
+        <button onClick={sendMessage} style={{ marginTop: 8 }}>Send message</button>
+        <Hint text="Try: cashout 50 cUSD / send 5 cUSD to 0xabc1234 / what's my balance" />
+      </Card>
 
-      <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
-        <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="userId" />
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="message" />
-      </div>
-      <button onClick={sendMessage} style={{ marginTop: 8 }}>Send message</button>
+      <Card title="Step 2: Confirm action">
+        <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
+          <input value={challengeId} onChange={(e) => setChallengeId(e.target.value)} placeholder="challengeId" />
+          <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="answer" />
+        </div>
+        <button onClick={confirm} style={{ marginTop: 8 }}>Confirm</button>
+      </Card>
 
-      <h3 style={{ marginTop: 20 }}>Confirm Action</h3>
-      <div style={{ display: "grid", gap: 8, maxWidth: 520 }}>
-        <input value={challengeId} onChange={(e) => setChallengeId(e.target.value)} placeholder="challengeId" />
-        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="answer" />
-      </div>
-      <button onClick={confirm} style={{ marginTop: 8 }}>Confirm</button>
-
-      {error && <p style={{ color: "#ff8080" }}>{error}</p>}
-      <pre style={{ whiteSpace: "pre-wrap", background: "#11182f", padding: 12, borderRadius: 8 }}>{JSON.stringify(response, null, 2)}</pre>
+      <ErrorText text={error} />
+      <Card title="Response"><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(response, null, 2)}</pre></Card>
     </main>
   );
 }
