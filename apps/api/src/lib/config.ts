@@ -19,3 +19,16 @@ export const paraConfig = {
     sendExecute: process.env.PARA_EP_SEND_EXECUTE || "/wallet/send/execute",
   }
 };
+
+export const offrampConfig = {
+  mode: (process.env.OFFRAMP_MODE || "mock").toLowerCase(),
+  apiBase: process.env.OFFRAMP_API_BASE || "",
+  apiKey: process.env.OFFRAMP_API_KEY || "",
+  timeoutMs: Number(process.env.OFFRAMP_TIMEOUT_MS || 15000),
+  fallbackToMockOnError: (process.env.OFFRAMP_FALLBACK_TO_MOCK_ON_ERROR || "true").toLowerCase() === "true",
+  endpoints: {
+    quote: process.env.OFFRAMP_EP_QUOTE || "/offramp/quote",
+    create: process.env.OFFRAMP_EP_CREATE || "/offramp/create",
+    status: process.env.OFFRAMP_EP_STATUS || "/offramp/status",
+  }
+};

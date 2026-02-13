@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
-import { MockOfframpProvider } from "../adapters/offramp.js";
+import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { pricing } from "../lib/config.js";
 import { store } from "../lib/store.js";
 
 export const offrampRouter = Router();
-const provider = new MockOfframpProvider();
+const provider = new LiveOfframpProvider();
 
 const quoteSchema = z.object({
   userId: z.string(),
