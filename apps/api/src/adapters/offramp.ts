@@ -1,9 +1,46 @@
 import { randomUUID } from "node:crypto";
 import type { CashoutQuoteRequest, CashoutQuoteResponse, CreatePayoutRequest } from "../lib/types.js";
+import { offrampConfig } from "../lib/config.js";
 
 export interface OfframpProvider {
   quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse>;
   create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled" }>;
+}
+
+type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
+let liveStatus: OfframpLiveStatus = { mode: offrampConfig.mode === "live" ? "live" : "mock", healthy: offrampConfig.mode !== "live" };
+
+function setLiveStatus(ok: boolean, err?: string) {
+  liveStatus = { mode: offrampConfig.mode === "live" ? "live" : "mock", healthy: ok, lastError: err, lastCheckedAt: Date.now() };
+}
+
+export function getOfframpLiveStatus() {
+  return liveStatus;
+}
+
+async function offrampRequest(path: string, body: unknown) {
+  if (!offrampConfig.apiBase || !offrampConfig.apiKey) throw new Error("offramp_not_configured");
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), offrampConfig.timeoutMs);
+
+  try {
+    const r = await fetch(`${offrampConfig.apiBase}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${offrampConfig.apiKey}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`offramp_http_${r.status}`);
+    const data = await r.json();
+    setLiveStatus(true);
+    return data;
+  } catch (e: any) {
+    const msg = e?.name === "AbortError" ? "offramp_timeout" : String(e?.message || e);
+    setLiveStatus(false, msg);
+    throw new Error(msg);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export class MockOfframpProvider implements OfframpProvider {
@@ -28,5 +65,40 @@ export class MockOfframpProvider implements OfframpProvider {
       payoutId: `po_${randomUUID()}`,
       status: "pending" as const
     };
+  }
+}
+
+export class LiveOfframpProvider implements OfframpProvider {
+  private fallback = new MockOfframpProvider();
+
+  async quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse> {
+    if (offrampConfig.mode !== "live") return this.fallback.quote(input);
+    try {
+      const data = await offrampRequest(offrampConfig.endpoints.quote, input);
+      return {
+        quoteId: String(data.quoteId || `oq_${randomUUID()}`),
+        rate: String(data.rate || "0"),
+        fee: String(data.fee || "0"),
+        receiveAmount: String(data.receiveAmount || "0"),
+        eta: String(data.eta || "5-30 min"),
+      };
+    } catch (e) {
+      if (!offrampConfig.fallbackToMockOnError) throw e;
+      return this.fallback.quote(input);
+    }
+  }
+
+  async create(input: CreatePayoutRequest) {
+    if (offrampConfig.mode !== "live") return this.fallback.create(input);
+    try {
+      const data = await offrampRequest(offrampConfig.endpoints.create, input);
+      return {
+        payoutId: String(data.payoutId || `po_${randomUUID()}`),
+        status: (data.status || "pending") as "pending" | "processing" | "settled",
+      };
+    } catch (e) {
+      if (!offrampConfig.fallbackToMockOnError) throw e;
+      return this.fallback.create(input);
+    }
   }
 }

@@ -4,12 +4,12 @@ import { parseIntent } from "../lib/intents.js";
 import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { ParaWalletProvider } from "../adapters/para.js";
-import { MockOfframpProvider } from "../adapters/offramp.js";
+import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
 
 export const chatRouter = Router();
 const wallet = new ParaWalletProvider();
-const offramp = new MockOfframpProvider();
+const offramp = new LiveOfframpProvider();
 
 const chatSchema = z.object({ userId: z.string(), text: z.string() });
 

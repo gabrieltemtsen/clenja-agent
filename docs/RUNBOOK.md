@@ -41,5 +41,6 @@ REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..
 - Para adapter supports `PARA_MODE=mock|live`. In `live`, API calls use `PARA_API_BASE` + `PARA_API_KEY`.
 - You can customize Para endpoint paths with `PARA_EP_*` env variables.
 - Para live mode supports timeout (`PARA_TIMEOUT_MS`) and fallback behavior (`PARA_FALLBACK_TO_MOCK_ON_ERROR`).
+- Offramp also supports `OFFRAMP_MODE=mock|live` with `OFFRAMP_API_BASE`, `OFFRAMP_API_KEY`, `OFFRAMP_EP_*`, timeout, and fallback.
 - Check readiness with `GET /v1/readiness`.
 - State is persisted in `STATE_DB_PATH` (default `./.data/state.json`).
