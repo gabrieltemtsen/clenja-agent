@@ -25,6 +25,14 @@ Then open `http://localhost:3000` and use:
 - `/beneficiaries`
 - `/cashout-status`
 - `/agent` (chat + confirm playground)
+- `/demo-script` (judge flow)
+
+## 4) Build submission bundle
+```bash
+make submission-pack
+# or with links
+REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..." KARMA_LINK="https://..." TWEET_LINK="https://x.com/..." make submission-pack
+```
 
 ## Notes
 - Without x402 env configured, paid endpoints return `503 x402_not_configured`.
