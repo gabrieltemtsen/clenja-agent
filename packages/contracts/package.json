@@ -1,0 +1,10 @@
+{
+  "name": "@clenja/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'todo: contracts scaffold'",
+    "typecheck": "echo 'n/a'",
+    "lint": "echo 'todo: lint'"
+  }
+}

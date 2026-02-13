@@ -1,0 +1,58 @@
+import { randomUUID } from "node:crypto";
+
+type ChallengeType = "new_recipient_last4" | "cashout_otp";
+type ChallengeStatus = "pending" | "verified" | "expired";
+
+export type Challenge = {
+  id: string;
+  userId: string;
+  type: ChallengeType;
+  expected: string;
+  status: ChallengeStatus;
+  createdAt: number;
+  expiresAt: number;
+  context: Record<string, unknown>;
+};
+
+const store = new Map<string, Challenge>();
+
+export function createChallenge(input: {
+  userId: string;
+  type: ChallengeType;
+  expected: string;
+  ttlSeconds?: number;
+  context?: Record<string, unknown>;
+}) {
+  const now = Date.now();
+  const ttl = (input.ttlSeconds ?? 300) * 1000;
+  const challenge: Challenge = {
+    id: `ch_${randomUUID()}`,
+    userId: input.userId,
+    type: input.type,
+    expected: input.expected,
+    status: "pending",
+    createdAt: now,
+    expiresAt: now + ttl,
+    context: input.context ?? {},
+  };
+  store.set(challenge.id, challenge);
+  return challenge;
+}
+
+export function verifyChallenge(challengeId: string, answer: string) {
+  const ch = store.get(challengeId);
+  if (!ch) return { ok: false as const, reason: "not_found" };
+  if (Date.now() > ch.expiresAt) {
+    ch.status = "expired";
+    return { ok: false as const, reason: "expired" };
+  }
+  if (ch.status !== "pending") return { ok: false as const, reason: "not_pending" };
+  if (String(answer).trim() !== String(ch.expected).trim()) return { ok: false as const, reason: "invalid_answer" };
+
+  ch.status = "verified";
+  return { ok: true as const, challenge: ch };
+}
+
+export function getChallenge(id: string) {
+  return store.get(id);
+}

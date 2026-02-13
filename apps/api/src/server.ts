@@ -1,0 +1,16 @@
+import "dotenv/config";
+import express from "express";
+import { walletRouter } from "./routes/wallet.js";
+import { offrampRouter } from "./routes/offramp.js";
+
+const app = express();
+app.use(express.json());
+
+app.get("/health", (_req, res) => res.json({ ok: true, service: "@clenja/api" }));
+app.use("/v1/wallet", walletRouter);
+app.use("/v1/offramp", offrampRouter);
+
+const port = Number(process.env.PORT || 8787);
+app.listen(port, () => {
+  console.log(`[clenja-api] listening on :${port}`);
+});

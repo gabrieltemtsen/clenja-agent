@@ -1,0 +1,12 @@
+{
+  "name": "@clenja/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "echo 'todo'",
+    "typecheck": "echo 'todo'",
+    "lint": "echo 'todo: lint'"
+  }
+}
