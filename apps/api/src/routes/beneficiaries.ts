@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { store } from "../lib/store.js";
+import { fail, ok } from "../lib/http.js";
 
 export const beneficiariesRouter = Router();
 
 beneficiariesRouter.get("/", (req, res) => {
   const userId = String(req.query.userId || "");
-  if (!userId) return res.status(400).json({ error: "userId_required" });
-  return res.json({ beneficiaries: store.listBeneficiaries(userId) });
+  if (!userId) return fail(res, "userId_required", "Query param userId is required", 400);
+  return ok(res, { beneficiaries: store.listBeneficiaries(userId) });
 });
 
 const createSchema = z.object({
@@ -21,7 +22,7 @@ const createSchema = z.object({
 
 beneficiariesRouter.post("/", (req, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return fail(res, "validation_error", "Invalid beneficiary payload", 400, parsed.error.flatten());
 
   const { userId, country, bankName, accountName, accountNumber } = parsed.data;
   const last4 = accountNumber.slice(-4);
@@ -39,5 +40,5 @@ beneficiariesRouter.post("/", (req, res) => {
   };
 
   store.addBeneficiary(b);
-  return res.json({ beneficiary: b });
+  return ok(res, { beneficiary: b });
 });
