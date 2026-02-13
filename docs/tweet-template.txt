@@ -1,0 +1,14 @@
+Built CLENJA for the Build Agents for the Real World @Celo hackathon 🤖
+
+CLENJA is a Telegram-first agentic finance assistant on Celo:
+- natural-language balance/send/cashout
+- confirmation + policy guardrails
+- receipts + payout status tracking
+- x402 paid APIs so other agents can integrate
+
+Karma: <KARMA_LINK>
+Repo: <REPO_LINK>
+Demo: <DEMO_LINK>
+
+Tagging @Celo @CeloDevs
+#Celo #AIagents #x402 #BuildOnCelo
