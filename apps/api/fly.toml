@@ -1,5 +1,5 @@
 # Update app name before deploy: flyctl apps create <name>
-app = "clenja-api"
+app = "clenja-agent"
 primary_region = "ams"
 
 [build]
