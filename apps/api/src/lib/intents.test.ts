@@ -20,3 +20,8 @@ test("parse history intent", () => {
   const i = parseIntent("show my receipts history");
   assert.equal(i.kind, "history");
 });
+
+test("parse address intent", () => {
+  const i = parseIntent("what's my address");
+  assert.equal(i.kind, "address");
+});
