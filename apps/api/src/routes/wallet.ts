@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
-import { ParaWalletProvider } from "../adapters/para.js";
+import { makeWalletProvider } from "../adapters/provider.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { pricing } from "../lib/config.js";
 import { store } from "../lib/store.js";
 
 export const walletRouter = Router();
-const wallet = new ParaWalletProvider();
+const wallet = makeWalletProvider();
 
 walletRouter.get("/balance", requireX402(pricing.walletBalance), async (req, res) => {
   const userId = String(req.query.userId || "tg:demo");
