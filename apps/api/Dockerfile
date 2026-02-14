@@ -8,6 +8,8 @@ RUN corepack enable && corepack prepare pnpm@10.2.0 --activate
 RUN pnpm install --frozen-lockfile=false
 RUN pnpm --filter @clenja/api build
 
+WORKDIR /app/apps/api
+
 EXPOSE 8080
 
-CMD ["node", "apps/api/dist/server.js"]
+CMD ["sh", "-c", "node dist/server.js || node dist/src/server.js"]
