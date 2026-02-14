@@ -37,10 +37,10 @@ REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..
 ## 5) Fly.io API deploy (monorepo-safe)
 ```bash
 # from repo root
-flyctl apps create clenja-agent
-flyctl deploy -c apps/api/fly.toml
+flyctl apps create clenja-agent-api
+flyctl deploy -c apps/api/fly.toml --ha=false
 # if app fails, inspect startup path quickly:
-flyctl ssh console -a clenja-agent -C "ls -la /app/apps/api/dist || true; ls -la /app/apps/api/dist/src || true"
+flyctl ssh console -a clenja-agent-api -C "ls -la /app/apps/api/dist || true; ls -la /app/apps/api/dist/src || true"
 ```
 
 Set secrets:
