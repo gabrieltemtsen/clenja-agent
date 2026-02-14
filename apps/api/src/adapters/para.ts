@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Para as ParaServer } from "@getpara/server-sdk";
 import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult } from "./wallet.js";
 import { paraConfig, safetyConfig } from "../lib/config.js";
 
@@ -13,43 +14,60 @@ export function getParaLiveStatus() {
   return liveStatus;
 }
 
-async function paraRequest(path: string, body: unknown) {
-  if (!paraConfig.apiBase || !paraConfig.apiKey) throw new Error("para_not_configured");
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), paraConfig.timeoutMs);
+let paraClient: ParaServer | null = null;
+const walletCache = new Map<string, any>();
 
-  try {
-    const r = await fetch(`${paraConfig.apiBase}${path}`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${paraConfig.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-
-    if (!r.ok) throw new Error(`para_http_${r.status}`);
-    const data = await r.json();
-    setLiveStatus(true);
-    return data;
-  } catch (e: any) {
-    const msg = e?.name === "AbortError" ? "para_timeout" : String(e?.message || e);
-    setLiveStatus(false, msg);
-    throw new Error(msg);
-  } finally {
-    clearTimeout(timer);
+function getParaClient() {
+  if (!paraClient) {
+    if (!paraConfig.apiKey) throw new Error("para_not_configured");
+    paraClient = new ParaServer(paraConfig.apiKey);
   }
+  return paraClient;
+}
+
+async function getOrCreateUserWallet(userId: string): Promise<any> {
+  const cached = walletCache.get(userId);
+  if (cached) return cached;
+
+  const para = getParaClient();
+  await para.ready();
+  const pregenId = { telegramUserId: userId };
+
+  const existing = (await para.getPregenWallets({ pregenId })) || [];
+  const evmWallet = existing.find((w: any) => String((w as any)?.type || "").toUpperCase() === "EVM") || existing[0];
+  if (evmWallet) {
+    walletCache.set(userId, evmWallet);
+    return evmWallet;
+  }
+
+  const created = await para.createPregenWallet({ type: "EVM", pregenId });
+  walletCache.set(userId, created);
+  return created;
+}
+
+function assertLiveConfig() {
+  if (paraConfig.mode === "live" && !paraConfig.apiKey && safetyConfig.strictLiveMode) {
+    throw new Error("para_live_strict_config_missing");
+  }
+}
+
+function normalizeCeloAmount(value: string | number | undefined) {
+  const raw = String(value ?? "0");
+  if (!raw || raw === "0") return "0";
+  const maybeInt = /^\d+$/.test(raw);
+  if (!maybeInt) return raw;
+  // If this looks like wei, convert to CELO.
+  if (raw.length > 10) {
+    const padded = raw.padStart(19, "0");
+    const whole = padded.slice(0, -18).replace(/^0+/, "") || "0";
+    const frac = padded.slice(-18).replace(/0+$/, "");
+    return frac ? `${whole}.${frac}` : whole;
+  }
+  return raw;
 }
 
 function mockAddress(userId: string) {
   return `0xpara_${userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20)}`;
-}
-
-function assertLiveConfig() {
-  if (paraConfig.mode === "live" && (!paraConfig.apiBase || !paraConfig.apiKey) && safetyConfig.strictLiveMode) {
-    throw new Error("para_live_strict_config_missing");
-  }
 }
 
 export class ParaWalletProvider implements WalletProvider {
@@ -57,10 +75,13 @@ export class ParaWalletProvider implements WalletProvider {
     assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
-        const data = await paraRequest(paraConfig.endpoints.createOrLink, { userId, chain: "celo" });
-        return { walletAddress: String(data.walletAddress || data.address) };
-      } catch (e) {
-        if (!paraConfig.fallbackToMockOnError) throw e;
+        const w = await getOrCreateUserWallet(userId);
+        setLiveStatus(true);
+        return { walletAddress: String((w as any).address || (w as any).walletAddress) };
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        setLiveStatus(false, msg);
+        if (!paraConfig.fallbackToMockOnError) throw new Error(msg);
       }
     }
     return { walletAddress: mockAddress(userId) };
@@ -70,14 +91,28 @@ export class ParaWalletProvider implements WalletProvider {
     assertLiveConfig();
     if (paraConfig.mode === "live") {
       try {
-        const data = await paraRequest(paraConfig.endpoints.balance, { userId, chain: "celo" });
+        const para = getParaClient();
+        await para.ready();
+        const w = await getOrCreateUserWallet(userId);
+        const raw = await para.getWalletBalance({
+          walletId: String((w as any).id),
+          rpcUrl: process.env.PARA_CELO_RPC_URL || "https://forno.celo.org",
+        });
+
+        const celoAmount = normalizeCeloAmount(raw as any);
+        setLiveStatus(true);
         return {
-          walletAddress: String(data.walletAddress || data.address || mockAddress(userId)),
+          walletAddress: String((w as any).address || (w as any).walletAddress),
           chain: "celo",
-          balances: Array.isArray(data.balances) ? data.balances : [],
+          balances: [
+            { token: "CELO", amount: celoAmount, usd: "0" },
+            { token: "cUSD", amount: "0", usd: "0" },
+          ],
         } as WalletBalance;
-      } catch (e) {
-        if (!paraConfig.fallbackToMockOnError) throw e;
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        setLiveStatus(false, msg);
+        if (!paraConfig.fallbackToMockOnError) throw new Error(msg);
       }
     }
     return {
@@ -92,17 +127,8 @@ export class ParaWalletProvider implements WalletProvider {
 
   async prepareSend(input: PrepareSendInput): Promise<PrepareSendResult> {
     assertLiveConfig();
-    if (paraConfig.mode === "live") {
-      try {
-        const data = await paraRequest(paraConfig.endpoints.sendPrepare, input);
-        return {
-          quoteId: String(data.quoteId || `q_${randomUUID()}`),
-          networkFee: String(data.networkFee || "0.0004"),
-          estimatedArrival: String(data.estimatedArrival || "instant"),
-        };
-      } catch (e) {
-        if (!paraConfig.fallbackToMockOnError) throw e;
-      }
+    if (paraConfig.mode === "live" && !paraConfig.fallbackToMockOnError) {
+      throw new Error("para_live_send_not_implemented");
     }
     return {
       quoteId: `q_${randomUUID()}`,
@@ -111,18 +137,10 @@ export class ParaWalletProvider implements WalletProvider {
     };
   }
 
-  async executeSend(input: { userId: string; quoteId: string; to: string; token: "CELO" | "cUSD"; amount: string }) {
+  async executeSend(_input: { userId: string; quoteId: string; to: string; token: "CELO" | "cUSD"; amount: string }) {
     assertLiveConfig();
-    if (paraConfig.mode === "live") {
-      try {
-        const data = await paraRequest(paraConfig.endpoints.sendExecute, input);
-        return {
-          txHash: String(data.txHash || data.hash),
-          status: (data.status || "submitted") as "submitted" | "confirmed",
-        };
-      } catch (e) {
-        if (!paraConfig.fallbackToMockOnError) throw e;
-      }
+    if (paraConfig.mode === "live" && !paraConfig.fallbackToMockOnError) {
+      throw new Error("para_live_send_not_implemented");
     }
     return {
       txHash: `0x${randomUUID().replace(/-/g, "")}`,
