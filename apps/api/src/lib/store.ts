@@ -52,6 +52,15 @@ type IdempotencyRecord = {
   createdAt: number;
 };
 
+type WalletRecord = {
+  userId: string;
+  provider: "turnkey" | "para" | "mock";
+  walletAddress: string;
+  meta?: Record<string, string>;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
@@ -60,6 +69,7 @@ type DbShape = {
   cashouts: CashoutOrder[];
   audit: AuditEvent[];
   idempotency: IdempotencyRecord[];
+  wallets: WalletRecord[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -67,7 +77,7 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
@@ -83,6 +93,7 @@ function readDb(): DbShape {
     cashouts: parsed.cashouts ?? [],
     audit: parsed.audit ?? [],
     idempotency: parsed.idempotency ?? [],
+    wallets: parsed.wallets ?? [],
   };
 }
 
@@ -163,6 +174,20 @@ export const store = {
     const db = readDb();
     db.idempotency.unshift(record);
     db.idempotency = db.idempotency.slice(0, 5000);
+    writeDb(db);
+  },
+  getWallet(userId: string, provider: WalletRecord["provider"]) {
+    return readDb().wallets.find((w) => w.userId === userId && w.provider === provider);
+  },
+  upsertWallet(record: WalletRecord) {
+    const db = readDb();
+    const i = db.wallets.findIndex((w) => w.userId === record.userId && w.provider === record.provider);
+    if (i >= 0) {
+      db.wallets[i] = { ...db.wallets[i], ...record, updatedAt: Date.now() };
+    } else {
+      db.wallets.unshift({ ...record, createdAt: record.createdAt || Date.now(), updatedAt: Date.now() });
+      db.wallets = db.wallets.slice(0, 10000);
+    }
     writeDb(db);
   }
 };
