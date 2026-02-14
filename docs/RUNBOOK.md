@@ -34,6 +34,24 @@ make submission-pack
 REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..." KARMA_LINK="https://..." TWEET_LINK="https://x.com/..." make submission-pack
 ```
 
+## 5) Fly.io API deploy (monorepo-safe)
+```bash
+# from repo root
+flyctl apps create clenja-api
+flyctl deploy -c apps/api/fly.toml
+```
+
+Set secrets:
+```bash
+flyctl secrets set \
+  THIRDWEB_SECRET_KEY=... \
+  X402_SERVER_WALLET=0x... \
+  X402_NETWORK=celo \
+  PARA_MODE=mock \
+  OFFRAMP_MODE=mock \
+  STATE_DB_PATH=./.data/state.json
+```
+
 ## Notes
 - Without x402 env configured, paid endpoints return `503 x402_not_configured`.
 - With x402 configured but no payment header, endpoints return `402 Payment Required`.
