@@ -36,3 +36,14 @@ export const offrampConfig = {
 export const safetyConfig = {
   strictLiveMode: (process.env.STRICT_LIVE_MODE || "false").toLowerCase() === "true",
 };
+
+export const walletConfig = {
+  provider: (process.env.WALLET_PROVIDER || "para").toLowerCase() as "para" | "turnkey" | "mock",
+};
+
+export const turnkeyConfig = {
+  organizationId: process.env.TURNKEY_ORGANIZATION_ID || "",
+  apiPublicKey: process.env.TURNKEY_API_PUBLIC_KEY || "",
+  apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY || "",
+  celoRpcUrl: process.env.CELO_RPC_URL || "https://forno.celo.org",
+};

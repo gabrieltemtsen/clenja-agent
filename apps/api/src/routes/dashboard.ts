@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { ParaWalletProvider } from "../adapters/para.js";
+import { makeWalletProvider } from "../adapters/provider.js";
 import { store } from "../lib/store.js";
 
 export const dashboardRouter = Router();
-const wallet = new ParaWalletProvider();
+const wallet = makeWalletProvider();
 
 dashboardRouter.get("/overview", async (req, res) => {
   const userId = String(req.query.userId || "");

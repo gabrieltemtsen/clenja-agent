@@ -3,14 +3,14 @@ import { z } from "zod";
 import { parseIntent } from "../lib/intents.js";
 import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
-import { ParaWalletProvider } from "../adapters/para.js";
+import { makeWalletProvider } from "../adapters/provider.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 import { toUserFacingProviderError } from "../lib/providerErrors.js";
 
 export const chatRouter = Router();
-const wallet = new ParaWalletProvider();
+const wallet = makeWalletProvider();
 const offramp = new LiveOfframpProvider();
 
 function fuzzyIncludes(a: string, b: string) {
