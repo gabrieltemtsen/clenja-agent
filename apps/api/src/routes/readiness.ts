@@ -6,7 +6,7 @@ import { getOfframpLiveStatus } from "../adapters/offramp.js";
 export const readinessRouter = Router();
 
 readinessRouter.get("/readiness", (_req, res) => {
-  const paraLiveConfigured = paraConfig.mode === "live" && Boolean(paraConfig.apiBase && paraConfig.apiKey);
+  const paraLiveConfigured = paraConfig.mode === "live" && Boolean(paraConfig.apiKey);
   const offrampLiveConfigured = offrampConfig.mode === "live" && Boolean(offrampConfig.apiBase && offrampConfig.apiKey);
   const ready = {
     x402: Boolean(process.env.THIRDWEB_SECRET_KEY && process.env.X402_SERVER_WALLET),
@@ -21,7 +21,7 @@ readinessRouter.get("/readiness", (_req, res) => {
     readiness: ready,
     para: {
       mode: paraConfig.mode,
-      apiBase: paraConfig.apiBase ? "configured" : "missing",
+      apiBase: paraConfig.apiBase ? "configured (legacy)" : "n/a (server-sdk)",
       timeoutMs: paraConfig.timeoutMs,
       fallbackToMockOnError: paraConfig.fallbackToMockOnError,
       endpoints: paraConfig.endpoints,
