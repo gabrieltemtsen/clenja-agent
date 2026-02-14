@@ -39,6 +39,8 @@ REPO_LINK="https://github.com/gabrieltemtsen/clenja-agent" DEMO_LINK="https://..
 # from repo root
 flyctl apps create clenja-agent
 flyctl deploy -c apps/api/fly.toml
+# if app fails, inspect startup path quickly:
+flyctl ssh console -a clenja-agent -C "ls -la /app/apps/api/dist || true; ls -la /app/apps/api/dist/src || true"
 ```
 
 Set secrets:
