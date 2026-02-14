@@ -20,7 +20,7 @@ app.use("/v1/chat", chatRouter);
 app.use("/v1/beneficiaries", beneficiariesRouter);
 app.use("/v1/dashboard", dashboardRouter);
 
-const port = Number(process.env.PORT || 8787);
+const port = Number(process.env.PORT || 8080);
 app.listen(port, () => {
   console.log(`[clenja-api] listening on :${port}`);
 });
