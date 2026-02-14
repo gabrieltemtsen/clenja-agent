@@ -59,6 +59,15 @@ chatRouter.post("/message", async (req, res) => {
     return res.json({ reply: `🧾 Found ${receipts.length} recent records.`, receipts });
   }
 
+  if (intent.kind === "address") {
+    try {
+      const w = await wallet.createOrLinkUserWallet(userId);
+      return res.json({ reply: `🏦 Wallet address: ${w.walletAddress}`, walletAddress: w.walletAddress });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+    }
+  }
+
   if (intent.kind === "status") {
     return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
   }
