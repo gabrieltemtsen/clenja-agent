@@ -8,7 +8,8 @@ primary_region = 'ams'
   PORT = '8080'
 
 [processes]
-  app = "sh -c 'cd /app/apps/api && node dist/server.js || node dist/src/server.js'"
+  # Temporary runtime until Fly image/startup path is stable across builders
+  app = "sh -c 'cd /app && pnpm --filter @clenja/api dev'"
 
 [http_service]
   internal_port = 8080
