@@ -60,6 +60,21 @@ async function handleUpdate(update) {
   const text = msg.text.trim();
 
   if (text === "/start") {
+    try {
+      const { status, data } = await apiCall("/v1/chat/message", { userId, text: "what's my address" });
+      const walletAddress = data?.walletAddress;
+      if (status < 400 && walletAddress) {
+        await sendMessage(
+          msg.chat.id,
+          `CLENJA is live ✅\nWallet ready: ${walletAddress}\n\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD`,
+          msg.message_id,
+        );
+        return;
+      }
+    } catch {
+      // fall through to default welcome
+    }
+
     await sendMessage(msg.chat.id, "CLENJA is live ✅\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD", msg.message_id);
     return;
   }
@@ -67,7 +82,7 @@ async function handleUpdate(update) {
   if (text === "/help") {
     await sendMessage(
       msg.chat.id,
-      "Available:\n• balance\n• history\n• status\n• send <amount> <cUSD|CELO> to <address>\n• cashout <amount> <cUSD|CELO>\n• confirm <challengeId> <answer>",
+      "Available:\n• balance\n• address\n• history\n• status\n• send <amount> <cUSD|CELO> to <address>\n• cashout <amount> <cUSD|CELO>\n• confirm <challengeId> <answer>",
       msg.message_id,
     );
     return;
