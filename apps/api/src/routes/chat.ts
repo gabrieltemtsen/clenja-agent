@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { parseIntent } from "../lib/intents.js";
+import { routeIntent } from "../lib/intentRouter.js";
 import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { makeWalletProvider } from "../adapters/provider.js";
@@ -36,8 +36,9 @@ chatRouter.post("/message", async (req, res) => {
   res.setHeader("x-ratelimit-limit", "20");
   res.setHeader("x-ratelimit-remaining", String(rl.remaining));
 
-  const intent = parseIntent(text);
-  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind } });
+  const routed = await routeIntent(text);
+  const intent = routed.intent;
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind, parser: routed.source } });
 
   if (intent.kind === "help") {
     return res.json({
@@ -132,7 +133,7 @@ chatRouter.post("/message", async (req, res) => {
     }
   }
 
-  return res.json({ reply: "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
+  return res.json({ reply: routed.assistantReply || "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
 });
 
 const confirmSchema = z.object({ userId: z.string(), challengeId: z.string(), answer: z.string() });
