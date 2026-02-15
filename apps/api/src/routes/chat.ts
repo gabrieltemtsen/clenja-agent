@@ -150,20 +150,30 @@ chatRouter.post("/confirm", async (req, res) => {
 
   const ctx = vr.challenge.context as any;
   if (ctx.kind === "send") {
-    const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
-    recordPolicySpend(userId, Number(ctx.amount));
-    store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
-    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
-    return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
+    try {
+      const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
+      recordPolicySpend(userId, Number(ctx.amount));
+      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
+      return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
+    } catch (e) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
+    }
   }
 
   if (ctx.kind === "cashout") {
-    const beneficiary = ctx.beneficiary || { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" };
-    const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary, otp: answer });
-    recordPolicySpend(userId, Number(ctx.amount));
-    store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
-    store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
-    return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
+    try {
+      const beneficiary = ctx.beneficiary || { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" };
+      const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary, otp: answer });
+      recordPolicySpend(userId, Number(ctx.amount));
+      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
+      return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
+    } catch (e) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+    }
   }
 
   return res.json({ reply: "Unknown confirmation context." });
