@@ -54,6 +54,19 @@ chatRouter.post("/message", async (req, res) => {
     }
   }
 
+  if (intent.kind === "sendability_check") {
+    try {
+      const b = await wallet.getBalance(userId);
+      const celo = Number(b.balances.find((x) => x.token === "CELO")?.amount || "0");
+      const reply = celo > 0
+        ? `Yes — you can send CELO. You currently have about ${celo} CELO. Say: send <amount> CELO to <0x...>.`
+        : "Not yet — you currently have 0 CELO. Fund your wallet first, then I can send instantly.";
+      return res.json({ reply, data: b });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+    }
+  }
+
   if (intent.kind === "history") {
     const receipts = store.listReceipts(userId).slice(0, 10);
     return res.json({ reply: `🧾 Found ${receipts.length} recent records.`, receipts });
