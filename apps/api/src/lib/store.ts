@@ -77,6 +77,14 @@ type PendingUserAction = {
   createdAt: number;
 };
 
+type UserPolicyConfig = {
+  userId: string;
+  dailyLimitUsd: number;
+  perTxLimitUsd: number;
+  paused: boolean;
+  updatedAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
@@ -88,6 +96,7 @@ type DbShape = {
   wallets: WalletRecord[];
   recipients: RecipientRecord[];
   pendingActions: PendingUserAction[];
+  userPolicies: UserPolicyConfig[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -95,7 +104,7 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [], recipients: [], pendingActions: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [], recipients: [], pendingActions: [], userPolicies: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
@@ -114,6 +123,7 @@ function readDb(): DbShape {
     wallets: parsed.wallets ?? [],
     recipients: parsed.recipients ?? [],
     pendingActions: parsed.pendingActions ?? [],
+    userPolicies: parsed.userPolicies ?? [],
   };
 }
 
@@ -245,5 +255,18 @@ export const store = {
     const db = readDb();
     db.pendingActions = db.pendingActions.filter((a) => a.userId !== userId);
     writeDb(db);
+  },
+  getUserPolicy(userId: string) {
+    return readDb().userPolicies.find((p) => p.userId === userId);
+  },
+  upsertUserPolicy(userId: string, patch: Partial<Omit<UserPolicyConfig, "userId">>) {
+    const db = readDb();
+    const i = db.userPolicies.findIndex((p) => p.userId === userId);
+    const base: UserPolicyConfig = i >= 0 ? db.userPolicies[i] : { userId, dailyLimitUsd: 200, perTxLimitUsd: 50, paused: false, updatedAt: Date.now() };
+    const next: UserPolicyConfig = { ...base, ...patch, userId, updatedAt: Date.now() };
+    if (i >= 0) db.userPolicies[i] = next; else db.userPolicies.unshift(next);
+    db.userPolicies = db.userPolicies.slice(0, 10000);
+    writeDb(db);
+    return next;
   }
 };
