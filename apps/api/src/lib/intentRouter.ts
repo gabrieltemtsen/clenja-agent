@@ -31,7 +31,7 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
           {
             role: "system",
             content:
-              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, to, beneficiaryName, assistantReply. Allowed kind: help,balance,history,status,address,sendability_check,send,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
+              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, to, beneficiaryName, recipientName, name, address, assistantReply. Allowed kind: help,balance,history,status,address,greeting,sendability_check,list_recipients,save_recipient,send,send_to_recipient,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
           },
           { role: "user", content: text },
         ],
@@ -84,7 +84,29 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
       };
     }
 
-    if (["help", "balance", "history", "status", "address", "greeting", "sendability_check"].includes(k)) {
+    if (k === "save_recipient") {
+      if (!parsed.name || !parsed.address) {
+        return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "To save a recipient, send: save recipient <name> <0xaddress>." };
+      }
+      return { intent: { kind: "save_recipient", name: String(parsed.name), address: String(parsed.address) }, source: "llm" };
+    }
+
+    if (k === "send_to_recipient") {
+      if (!parsed.amount || !parsed.token || !parsed.recipientName) {
+        return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "Tell me amount, token, and recipient name (e.g., send 5 CELO to Gabriel)." };
+      }
+      return {
+        intent: {
+          kind: "send_to_recipient",
+          amount: String(parsed.amount),
+          token: String(parsed.token).toLowerCase() === "cusd" ? "cUSD" : "CELO",
+          recipientName: String(parsed.recipientName),
+        },
+        source: "llm",
+      };
+    }
+
+    if (["help", "balance", "history", "status", "address", "greeting", "sendability_check", "list_recipients"].includes(k)) {
       return { intent: { kind: k as any }, source: "llm" };
     }
 

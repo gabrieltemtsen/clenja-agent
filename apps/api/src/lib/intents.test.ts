@@ -45,3 +45,18 @@ test("parse greeting intent", () => {
   const i = parseIntent("How are you");
   assert.equal(i.kind, "greeting");
 });
+
+test("parse save recipient intent", () => {
+  const i = parseIntent("save recipient Gabriel 0xbE95bb47789E5f4Af467306C97DED0877BF817B5");
+  assert.equal(i.kind, "save_recipient");
+});
+
+test("parse send to recipient intent", () => {
+  const i = parseIntent("send 5 cUSD to Gabriel");
+  assert.equal(i.kind, "send_to_recipient");
+});
+
+test("parse list recipients intent", () => {
+  const i = parseIntent("list recipients");
+  assert.equal(i.kind, "list_recipients");
+});
