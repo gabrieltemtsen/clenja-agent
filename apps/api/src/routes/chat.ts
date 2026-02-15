@@ -42,7 +42,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, and cashout. Try: 'send 5 cUSD to 0xabc1234', 'cashout 50 cUSD', or 'what's my address'."
+      reply: "I can help with balances, transfers, recipients, and cashout. Try: 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients', or 'cashout 50 cUSD'."
     });
   }
 
@@ -77,6 +77,25 @@ chatRouter.post("/message", async (req, res) => {
     return res.json({ reply: `🧾 Found ${receipts.length} recent records.`, receipts });
   }
 
+  if (intent.kind === "save_recipient") {
+    store.upsertRecipient({
+      id: `rcp_${Date.now()}`,
+      userId,
+      name: intent.name,
+      address: intent.address,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return res.json({ reply: `✅ Saved recipient '${intent.name}' (${intent.address.slice(0, 6)}...${intent.address.slice(-4)}).` });
+  }
+
+  if (intent.kind === "list_recipients") {
+    const recipients = store.listRecipients(userId);
+    if (!recipients.length) return res.json({ reply: "You have no saved recipients yet. Save one with: save recipient Gabriel 0x..." });
+    const lines = recipients.slice(0, 10).map((r) => `• ${r.name}: ${r.address.slice(0, 6)}...${r.address.slice(-4)}`);
+    return res.json({ reply: `Saved recipients:\n${lines.join("\n")}`, recipients });
+  }
+
   if (intent.kind === "address") {
     try {
       const w = await wallet.createOrLinkUserWallet(userId);
@@ -88,6 +107,32 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "status") {
     return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
+  }
+
+  if (intent.kind === "send_to_recipient") {
+    const recipients = store.listRecipients(userId).filter((r) => fuzzyIncludes(r.name, intent.recipientName));
+    if (recipients.length === 0) {
+      return res.json({ reply: `I couldn't find a saved recipient named '${intent.recipientName}'. Save it with: save recipient ${intent.recipientName} 0x...` });
+    }
+    if (recipients.length > 1) {
+      return res.json({ reply: `I found multiple recipients for '${intent.recipientName}': ${recipients.map((r) => r.name).join(", ")}. Please be more specific.` });
+    }
+
+    const resolved = recipients[0];
+    const pc = checkPolicy({ userId, action: "send", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD", recipient: resolved.address });
+    if (!pc.ok) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.blocked", status: "error", detail: { reason: pc.reason } });
+      return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    }
+
+    try {
+      const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: resolved.address });
+      const last4 = resolved.address.slice(-4);
+      const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: resolved.address, token: intent.token, amount: intent.amount } });
+      return res.json({ reply: `Confirm send to ${resolved.name} by typing last 4 chars (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
+    }
   }
 
   if (intent.kind === "send") {

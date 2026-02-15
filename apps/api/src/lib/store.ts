@@ -61,6 +61,15 @@ type WalletRecord = {
   updatedAt: number;
 };
 
+type RecipientRecord = {
+  id: string;
+  userId: string;
+  name: string;
+  address: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
@@ -70,6 +79,7 @@ type DbShape = {
   audit: AuditEvent[];
   idempotency: IdempotencyRecord[];
   wallets: WalletRecord[];
+  recipients: RecipientRecord[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -77,7 +87,7 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [], recipients: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
@@ -94,6 +104,7 @@ function readDb(): DbShape {
     audit: parsed.audit ?? [],
     idempotency: parsed.idempotency ?? [],
     wallets: parsed.wallets ?? [],
+    recipients: parsed.recipients ?? [],
   };
 }
 
@@ -187,6 +198,20 @@ export const store = {
     } else {
       db.wallets.unshift({ ...record, createdAt: record.createdAt || Date.now(), updatedAt: Date.now() });
       db.wallets = db.wallets.slice(0, 10000);
+    }
+    writeDb(db);
+  },
+  listRecipients(userId: string) {
+    return readDb().recipients.filter((r) => r.userId === userId);
+  },
+  upsertRecipient(record: RecipientRecord) {
+    const db = readDb();
+    const i = db.recipients.findIndex((r) => r.userId === record.userId && r.name.toLowerCase() === record.name.toLowerCase());
+    if (i >= 0) {
+      db.recipients[i] = { ...db.recipients[i], ...record, updatedAt: Date.now() };
+    } else {
+      db.recipients.unshift({ ...record, createdAt: record.createdAt || Date.now(), updatedAt: Date.now() });
+      db.recipients = db.recipients.slice(0, 10000);
     }
     writeDb(db);
   }
