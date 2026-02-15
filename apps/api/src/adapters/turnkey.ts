@@ -209,8 +209,9 @@ export class TurnkeyWalletProvider implements WalletProvider {
       timestampMs: nowMs(),
     });
 
-    const rawSigned = String((signed as any)?.signedTransaction || "");
+    let rawSigned = String((signed as any)?.signedTransaction || "").trim();
     if (!rawSigned) throw new Error("turnkey_sign_failed");
+    if (!rawSigned.startsWith("0x")) rawSigned = `0x${rawSigned}`;
 
     const txHash = await rpc("eth_sendRawTransaction", [rawSigned]);
 

@@ -11,5 +11,8 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
   if (msg.includes("http_401") || msg.includes("http_403")) {
     return `${label} credentials were rejected.`;
   }
+  if (msg.includes("rpc_-32602")) {
+    return `${label} rejected the transaction format. Please retry; if it persists, check wallet signing config.`;
+  }
   return `${label} request failed. Please retry.`;
 }
