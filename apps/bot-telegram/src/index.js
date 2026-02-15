@@ -10,6 +10,17 @@ const pendingChallenges = new Map(); // fallback in-memory: userId -> challengeI
 
 const db = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } }) : null;
 
+const COMMAND_KEYBOARD = {
+  keyboard: [
+    [{ text: "💰 Balance" }, { text: "🏦 Address" }],
+    [{ text: "👥 Recipients" }, { text: "📒 History" }],
+    [{ text: "💸 Send" }, { text: "🏧 Cashout" }],
+    [{ text: "⚙️ Limits" }, { text: "❓ Help" }],
+  ],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
 if (!BOT_TOKEN) {
   console.error("[clenja-bot] TELEGRAM_BOT_TOKEN missing");
   process.exit(1);
@@ -49,12 +60,26 @@ async function apiCall(endpoint, payload, idempotencyKeyValue) {
   return { status: r.status, data, headers: r.headers };
 }
 
-async function sendMessage(chatId, text, replyToMessageId) {
+async function sendMessage(chatId, text, replyToMessageId, withKeyboard = false) {
   return tg("sendMessage", {
     chat_id: chatId,
     text,
     ...(replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : {}),
+    ...(withKeyboard ? { reply_markup: COMMAND_KEYBOARD } : {}),
   });
+}
+
+function normalizeUiCommand(text) {
+  const t = text.trim().toLowerCase();
+  if (t.includes("balance")) return "what's my balance";
+  if (t.includes("address")) return "what's my address";
+  if (t.includes("history")) return "history";
+  if (t.includes("recipients")) return "list recipients";
+  if (t.includes("cashout")) return "cashout 50 cUSD";
+  if (t.includes("help")) return "/help";
+  if (t.includes("send")) return "send 1 CELO to 0x...";
+  if (t.includes("limits")) return "show limits";
+  return text;
 }
 
 async function initDb() {
@@ -101,9 +126,10 @@ async function handleUpdate(update) {
   if (!msg?.text) return;
 
   const userId = `tg:${msg.from?.id ?? "unknown"}`;
-  const text = msg.text.trim();
+  const rawText = msg.text.trim();
+  const text = normalizeUiCommand(rawText);
 
-  if (text === "/start") {
+  if (rawText === "/start") {
     try {
       const { status, data } = await apiCall("/v1/chat/message", { userId, text: "what's my address" });
       const walletAddress = data?.walletAddress;
@@ -112,6 +138,7 @@ async function handleUpdate(update) {
           msg.chat.id,
           `CLENJA is live ✅\nWallet ready: ${walletAddress}\n\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD`,
           msg.message_id,
+          true,
         );
         return;
       }
@@ -119,15 +146,16 @@ async function handleUpdate(update) {
       // fall through to default welcome
     }
 
-    await sendMessage(msg.chat.id, "CLENJA is live ✅\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD", msg.message_id);
+    await sendMessage(msg.chat.id, "CLENJA is live ✅\nTry: balance | history | send 5 cUSD to 0xabc1234 | cashout 50 cUSD", msg.message_id, true);
     return;
   }
 
-  if (text === "/help") {
+  if (rawText === "/help" || text === "/help") {
     await sendMessage(
       msg.chat.id,
-      "Available:\n• balance\n• address\n• history\n• status\n• send <amount> <cUSD|CELO> to <address>\n• cashout <amount> <cUSD|CELO>\n• confirm <challengeId> <answer>",
+      "Available:\n• balance\n• address\n• history\n• recipients (save/list/update/delete)\n• send <amount> <cUSD|CELO> to <address|name>\n• cashout <amount> <cUSD|CELO>\n• reply with confirmation code when prompted",
       msg.message_id,
+      true,
     );
     return;
   }
@@ -135,11 +163,11 @@ async function handleUpdate(update) {
   const pendingChallengeId = await getPendingChallenge(userId);
   const looksLikeBareAnswer = !!pendingChallengeId && /^[a-zA-Z0-9]{3,8}$/.test(text);
 
-  const endpoint = (text.startsWith("confirm ") || looksLikeBareAnswer) ? "/v1/chat/confirm" : "/v1/chat/message";
+  const endpoint = (rawText.toLowerCase().startsWith("confirm ") || looksLikeBareAnswer) ? "/v1/chat/confirm" : "/v1/chat/message";
   const payload = endpoint === "/v1/chat/confirm"
     ? (() => {
-        if (text.startsWith("confirm ")) {
-          const parts = text.split(/\s+/);
+        if (rawText.toLowerCase().startsWith("confirm ")) {
+          const parts = rawText.split(/\s+/);
           const challengeId = parts[1];
           const answer = parts.slice(2).join(" ");
           return { userId, challengeId, answer };
@@ -165,13 +193,13 @@ async function handleUpdate(update) {
 
     if (status === 429) {
       const retry = headers.get("retry-after") || "30";
-      await sendMessage(msg.chat.id, `⏳ Rate limited. Retry in ~${retry}s.`, msg.message_id);
+      await sendMessage(msg.chat.id, `⏳ Rate limited. Retry in ~${retry}s.`, msg.message_id, true);
       return;
     }
 
-    await sendMessage(msg.chat.id, `${reply}${extra}`, msg.message_id);
+    await sendMessage(msg.chat.id, `${reply}${extra}`, msg.message_id, true);
   } catch {
-    await sendMessage(msg.chat.id, "Service error. Please try again in a moment.", msg.message_id);
+    await sendMessage(msg.chat.id, "Service error. Please try again in a moment.", msg.message_id, true);
   }
 }
 
@@ -192,6 +220,15 @@ async function poll() {
   }
 }
 
+async function setBotCommands() {
+  await tg("setMyCommands", {
+    commands: [
+      { command: "start", description: "Start and create wallet" },
+      { command: "help", description: "Show available actions" },
+    ],
+  });
+}
+
 async function setupWebhook() {
   if (!WEBHOOK_URL) {
     console.error("[clenja-bot] TELEGRAM_WEBHOOK_URL is required when TELEGRAM_MODE=webhook");
@@ -204,6 +241,7 @@ async function setupWebhook() {
 async function boot() {
   try {
     await initDb();
+    await setBotCommands();
     if (MODE === "webhook") {
       await setupWebhook();
     } else {
