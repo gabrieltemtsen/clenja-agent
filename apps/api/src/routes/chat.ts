@@ -42,8 +42,12 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can do: balance, history, status, send, and cashout. Examples: 'send 5 cUSD to 0xabc1234', 'cashout 50 cUSD', 'cashout 50 cUSD to Gabriel'."
+      reply: "I can help with balances, transfers, and cashout. Try: 'send 5 cUSD to 0xabc1234', 'cashout 50 cUSD', or 'what's my address'."
     });
+  }
+
+  if (intent.kind === "greeting") {
+    return res.json({ reply: "Hey 👋 I’m ready. Ask me to check balance, send funds, or cashout." });
   }
 
   if (intent.kind === "balance") {
@@ -155,7 +159,8 @@ chatRouter.post("/confirm", async (req, res) => {
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
-      return res.json({ reply: `✅ Send submitted. Tx: ${tx.txHash}`, txHash: tx.txHash });
+      const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
+      return res.json({ reply: `✅ Sent ${ctx.amount} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${tx.txHash}\n${txUrl}`, txHash: tx.txHash, txUrl });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
