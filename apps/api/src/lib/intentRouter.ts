@@ -84,7 +84,7 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
       };
     }
 
-    if (["help", "balance", "history", "status", "address", "sendability_check"].includes(k)) {
+    if (["help", "balance", "history", "status", "address", "greeting", "sendability_check"].includes(k)) {
       return { intent: { kind: k as any }, source: "llm" };
     }
 

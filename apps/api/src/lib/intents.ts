@@ -4,6 +4,7 @@ export type Intent =
   | { kind: "status" }
   | { kind: "help" }
   | { kind: "address" }
+  | { kind: "greeting" }
   | { kind: "sendability_check" }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
@@ -23,6 +24,7 @@ export function parseIntent(text: string): Intent {
   if (/balance|what'?s my balance|my balance/i.test(c)) return { kind: "balance" };
   if (/history|my transactions|receipts/i.test(c)) return { kind: "history" };
   if (/status|system status|readiness/i.test(c)) return { kind: "status" };
+  if (/^(hi|hello|hey)\b/i.test(c) || /how are you/i.test(c)) return { kind: "greeting" };
 
   const s = c.match(sendRegex);
   if (s) {

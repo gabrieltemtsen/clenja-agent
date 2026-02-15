@@ -40,3 +40,8 @@ test("parse sendability check intent", () => {
   const i = parseIntent("Do I have enough celo to send to another person?");
   assert.equal(i.kind, "sendability_check");
 });
+
+test("parse greeting intent", () => {
+  const i = parseIntent("How are you");
+  assert.equal(i.kind, "greeting");
+});
