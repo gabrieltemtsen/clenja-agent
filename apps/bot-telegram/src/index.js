@@ -111,7 +111,7 @@ async function handleUpdate(update) {
     const reply = data.reply || (status >= 400 ? "Request failed." : "Done.");
 
     const extra = data.challengeId
-      ? `\n\nChallenge ID: ${data.challengeId}\nReply: confirm ${data.challengeId} <answer>\n(You can also just reply with the answer, e.g. 17B5)`
+      ? `\n\nReply with just the confirmation code (e.g. 17B5).`
       : "";
 
     if (data.challengeId) {
