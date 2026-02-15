@@ -70,6 +70,13 @@ type RecipientRecord = {
   updatedAt: number;
 };
 
+type PendingUserAction = {
+  userId: string;
+  kind: "update_recipient" | "delete_recipient";
+  payload: Record<string, string>;
+  createdAt: number;
+};
+
 type DbShape = {
   challenges: Record<string, Challenge>;
   policySpent: PolicyState;
@@ -80,6 +87,7 @@ type DbShape = {
   idempotency: IdempotencyRecord[];
   wallets: WalletRecord[];
   recipients: RecipientRecord[];
+  pendingActions: PendingUserAction[];
 };
 
 const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
@@ -87,7 +95,7 @@ const DB_PATH = process.env.STATE_DB_PATH || "./.data/state.json";
 function ensureFile() {
   if (!existsSync(DB_PATH)) {
     mkdirSync(dirname(DB_PATH), { recursive: true });
-    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [], recipients: [] };
+    const init: DbShape = { challenges: {}, policySpent: {}, receipts: [], beneficiaries: [], cashouts: [], audit: [], idempotency: [], wallets: [], recipients: [], pendingActions: [] };
     writeFileSync(DB_PATH, JSON.stringify(init, null, 2));
   }
 }
@@ -105,6 +113,7 @@ function readDb(): DbShape {
     idempotency: parsed.idempotency ?? [],
     wallets: parsed.wallets ?? [],
     recipients: parsed.recipients ?? [],
+    pendingActions: parsed.pendingActions ?? [],
   };
 }
 
@@ -213,6 +222,28 @@ export const store = {
       db.recipients.unshift({ ...record, createdAt: record.createdAt || Date.now(), updatedAt: Date.now() });
       db.recipients = db.recipients.slice(0, 10000);
     }
+    writeDb(db);
+  },
+  deleteRecipient(userId: string, name: string) {
+    const db = readDb();
+    const before = db.recipients.length;
+    db.recipients = db.recipients.filter((r) => !(r.userId === userId && r.name.toLowerCase() === name.toLowerCase()));
+    writeDb(db);
+    return before !== db.recipients.length;
+  },
+  setPendingAction(userId: string, kind: PendingUserAction["kind"], payload: Record<string, string>) {
+    const db = readDb();
+    db.pendingActions = db.pendingActions.filter((a) => a.userId !== userId);
+    db.pendingActions.unshift({ userId, kind, payload, createdAt: Date.now() });
+    db.pendingActions = db.pendingActions.slice(0, 5000);
+    writeDb(db);
+  },
+  getPendingAction(userId: string) {
+    return readDb().pendingActions.find((a) => a.userId === userId);
+  },
+  clearPendingAction(userId: string) {
+    const db = readDb();
+    db.pendingActions = db.pendingActions.filter((a) => a.userId !== userId);
     writeDb(db);
   }
 };

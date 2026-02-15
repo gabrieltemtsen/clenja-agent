@@ -31,7 +31,7 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
           {
             role: "system",
             content:
-              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, to, beneficiaryName, recipientName, name, address, assistantReply. Allowed kind: help,balance,history,status,address,greeting,sendability_check,list_recipients,save_recipient,send,send_to_recipient,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
+              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, to, beneficiaryName, recipientName, name, address, assistantReply. Allowed kind: help,balance,history,status,address,greeting,confirm_yes,sendability_check,list_recipients,save_recipient,update_recipient,delete_recipient,send,send_to_recipient,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
           },
           { role: "user", content: text },
         ],
@@ -91,6 +91,20 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
       return { intent: { kind: "save_recipient", name: String(parsed.name), address: String(parsed.address) }, source: "llm" };
     }
 
+    if (k === "update_recipient") {
+      if (!parsed.name || !parsed.address) {
+        return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "To update a recipient, send: update recipient <name> <0xaddress>." };
+      }
+      return { intent: { kind: "update_recipient", name: String(parsed.name), address: String(parsed.address) }, source: "llm" };
+    }
+
+    if (k === "delete_recipient") {
+      if (!parsed.name) {
+        return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "To delete a recipient, send: delete recipient <name>." };
+      }
+      return { intent: { kind: "delete_recipient", name: String(parsed.name) }, source: "llm" };
+    }
+
     if (k === "send_to_recipient") {
       if (!parsed.amount || !parsed.token || !parsed.recipientName) {
         return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "Tell me amount, token, and recipient name (e.g., send 5 CELO to Gabriel)." };
@@ -106,7 +120,7 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
       };
     }
 
-    if (["help", "balance", "history", "status", "address", "greeting", "sendability_check", "list_recipients"].includes(k)) {
+    if (["help", "balance", "history", "status", "address", "greeting", "confirm_yes", "sendability_check", "list_recipients"].includes(k)) {
       return { intent: { kind: k as any }, source: "llm" };
     }
 

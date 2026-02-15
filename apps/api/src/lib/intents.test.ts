@@ -60,3 +60,18 @@ test("parse list recipients intent", () => {
   const i = parseIntent("list recipients");
   assert.equal(i.kind, "list_recipients");
 });
+
+test("parse update recipient intent", () => {
+  const i = parseIntent("update recipient Gabriel 0xbE95bb47789E5f4Af467306C97DED0877BF817B5");
+  assert.equal(i.kind, "update_recipient");
+});
+
+test("parse delete recipient intent", () => {
+  const i = parseIntent("delete recipient Gabriel");
+  assert.equal(i.kind, "delete_recipient");
+});
+
+test("parse confirm yes intent", () => {
+  const i = parseIntent("YES");
+  assert.equal(i.kind, "confirm_yes");
+});
