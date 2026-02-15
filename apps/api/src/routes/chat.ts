@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { parseIntent } from "../lib/intents.js";
+import { routeIntent } from "../lib/intentRouter.js";
 import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { makeWalletProvider } from "../adapters/provider.js";
@@ -36,8 +36,9 @@ chatRouter.post("/message", async (req, res) => {
   res.setHeader("x-ratelimit-limit", "20");
   res.setHeader("x-ratelimit-remaining", String(rl.remaining));
 
-  const intent = parseIntent(text);
-  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind } });
+  const routed = await routeIntent(text);
+  const intent = routed.intent;
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.message", status: "ok", detail: { text, intent: intent.kind, parser: routed.source } });
 
   if (intent.kind === "help") {
     return res.json({
@@ -50,7 +51,7 @@ chatRouter.post("/message", async (req, res) => {
       const b = await wallet.getBalance(userId);
       return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -63,7 +64,7 @@ chatRouter.post("/message", async (req, res) => {
         : "Not yet — you currently have 0 CELO. Fund your wallet first, then I can send instantly.";
       return res.json({ reply, data: b });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -77,7 +78,7 @@ chatRouter.post("/message", async (req, res) => {
       const w = await wallet.createOrLinkUserWallet(userId);
       return res.json({ reply: `🏦 Wallet address: ${w.walletAddress}`, walletAddress: w.walletAddress });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -98,7 +99,7 @@ chatRouter.post("/message", async (req, res) => {
       const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
       return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -132,7 +133,7 @@ chatRouter.post("/message", async (req, res) => {
     }
   }
 
-  return res.json({ reply: "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
+  return res.json({ reply: routed.assistantReply || "I can help with balance, send, and cashout. Try: 'send 5 cUSD to 0xabc1234' or 'cashout 50 cUSD'." });
 });
 
 const confirmSchema = z.object({ userId: z.string(), challengeId: z.string(), answer: z.string() });

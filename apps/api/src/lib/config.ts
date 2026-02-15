@@ -47,3 +47,10 @@ export const turnkeyConfig = {
   apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY || "",
   celoRpcUrl: process.env.CELO_RPC_URL || "https://forno.celo.org",
 };
+
+export const llmConfig = {
+  apiKey: process.env.OPENAI_API_KEY || "",
+  model: process.env.CLENJA_LLM_MODEL || "gpt-4o-mini",
+  enabled: (process.env.CLENJA_LLM_INTENT_ENABLED || "true").toLowerCase() === "true",
+  timeoutMs: Number(process.env.CLENJA_LLM_TIMEOUT_MS || 6000),
+};

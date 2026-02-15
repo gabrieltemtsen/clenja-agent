@@ -69,33 +69,63 @@ async function getOrCreateWallet(userId: string): Promise<{ address: string; wal
   }
 
   const c = client();
-  const created = await c.createWallet({
-    walletName: mkWalletName(userId),
-    accounts: [
-      {
-        curve: "CURVE_SECP256K1",
-        pathFormat: "PATH_FORMAT_BIP32",
-        path: "m/44'/60'/0'/0/0",
-        addressFormat: "ADDRESS_FORMAT_ETHEREUM",
-      },
-    ],
-    timestampMs: nowMs(),
-  });
+  const walletName = mkWalletName(userId);
 
-  const walletId = String((created as any)?.walletId || "");
-  const address = String((created as any)?.addresses?.[0] || "");
-  if (!walletId || !address) throw new Error("turnkey_wallet_create_failed");
+  try {
+    const created = await c.createWallet({
+      walletName,
+      accounts: [
+        {
+          curve: "CURVE_SECP256K1",
+          pathFormat: "PATH_FORMAT_BIP32",
+          path: "m/44'/60'/0'/0/0",
+          addressFormat: "ADDRESS_FORMAT_ETHEREUM",
+        },
+      ],
+      timestampMs: nowMs(),
+    });
 
-  store.upsertWallet({
-    userId,
-    provider: "turnkey",
-    walletAddress: address,
-    meta: { walletId },
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
+    const walletId = String((created as any)?.walletId || "");
+    const address = String((created as any)?.addresses?.[0] || "");
+    if (!walletId || !address) throw new Error("turnkey_wallet_create_failed");
 
-  return { address, walletId };
+    store.upsertWallet({
+      userId,
+      provider: "turnkey",
+      walletAddress: address,
+      meta: { walletId },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return { address, walletId };
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (!msg.toLowerCase().includes("wallet label must be unique")) {
+      throw e;
+    }
+
+    // Wallet already exists in Turnkey but local state mapping may be missing (fresh deploy/ephemeral FS).
+    const wallets = await c.getWallets();
+    const found = (wallets as any)?.wallets?.find((w: any) => String(w?.walletName || "") === walletName);
+    const walletId = String(found?.walletId || "");
+    if (!walletId) throw new Error("turnkey_wallet_exists_but_not_found");
+
+    const accounts = await c.getWalletAccounts({ walletId, includeWalletDetails: false });
+    const address = String((accounts as any)?.accounts?.[0]?.address || "");
+    if (!address) throw new Error("turnkey_wallet_account_not_found");
+
+    store.upsertWallet({
+      userId,
+      provider: "turnkey",
+      walletAddress: address,
+      meta: { walletId },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    return { address, walletId };
+  }
 }
 
 export class TurnkeyWalletProvider implements WalletProvider {
