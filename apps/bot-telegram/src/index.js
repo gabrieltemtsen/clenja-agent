@@ -4,6 +4,7 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API_BASE = process.env.CLENJA_API_BASE || "http://localhost:8787";
 const MODE = (process.env.TELEGRAM_MODE || "polling").toLowerCase();
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL;
+const pendingChallenges = new Map(); // userId -> challengeId
 
 if (!BOT_TOKEN) {
   console.error("[clenja-bot] TELEGRAM_BOT_TOKEN missing");
@@ -88,13 +89,19 @@ async function handleUpdate(update) {
     return;
   }
 
-  const endpoint = text.startsWith("confirm ") ? "/v1/chat/confirm" : "/v1/chat/message";
-  const payload = text.startsWith("confirm ")
+  const pendingChallengeId = pendingChallenges.get(userId);
+  const looksLikeBareAnswer = !!pendingChallengeId && /^[a-zA-Z0-9]{3,8}$/.test(text);
+
+  const endpoint = (text.startsWith("confirm ") || looksLikeBareAnswer) ? "/v1/chat/confirm" : "/v1/chat/message";
+  const payload = endpoint === "/v1/chat/confirm"
     ? (() => {
-        const parts = text.split(/\s+/);
-        const challengeId = parts[1];
-        const answer = parts.slice(2).join(" ");
-        return { userId, challengeId, answer };
+        if (text.startsWith("confirm ")) {
+          const parts = text.split(/\s+/);
+          const challengeId = parts[1];
+          const answer = parts.slice(2).join(" ");
+          return { userId, challengeId, answer };
+        }
+        return { userId, challengeId: pendingChallengeId, answer: text };
       })()
     : { userId, text };
 
@@ -104,8 +111,14 @@ async function handleUpdate(update) {
     const reply = data.reply || (status >= 400 ? "Request failed." : "Done.");
 
     const extra = data.challengeId
-      ? `\n\nChallenge ID: ${data.challengeId}\nReply: confirm ${data.challengeId} <answer>`
+      ? `\n\nReply with just the confirmation code (e.g. 17B5).`
       : "";
+
+    if (data.challengeId) {
+      pendingChallenges.set(userId, data.challengeId);
+    } else if (endpoint === "/v1/chat/confirm" && status < 400) {
+      pendingChallenges.delete(userId);
+    }
 
     if (status === 429) {
       const retry = headers.get("retry-after") || "30";
