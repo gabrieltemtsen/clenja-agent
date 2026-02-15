@@ -1,10 +1,14 @@
 import "dotenv/config";
+import pg from "pg";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API_BASE = process.env.CLENJA_API_BASE || "http://localhost:8787";
 const MODE = (process.env.TELEGRAM_MODE || "polling").toLowerCase();
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL;
-const pendingChallenges = new Map(); // userId -> challengeId
+const DATABASE_URL = process.env.DATABASE_URL;
+const pendingChallenges = new Map(); // fallback in-memory: userId -> challengeId
+
+const db = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } }) : null;
 
 if (!BOT_TOKEN) {
   console.error("[clenja-bot] TELEGRAM_BOT_TOKEN missing");
@@ -53,6 +57,45 @@ async function sendMessage(chatId, text, replyToMessageId) {
   });
 }
 
+async function initDb() {
+  if (!db) return;
+  await db.query(`
+    create table if not exists bot_context (
+      user_id text primary key,
+      pending_challenge_id text,
+      updated_at timestamptz not null default now()
+    )
+  `);
+}
+
+async function setPendingChallenge(userId, challengeId) {
+  if (!challengeId) return;
+  if (!db) {
+    pendingChallenges.set(userId, challengeId);
+    return;
+  }
+  await db.query(
+    `insert into bot_context (user_id, pending_challenge_id, updated_at)
+     values ($1, $2, now())
+     on conflict (user_id) do update set pending_challenge_id = excluded.pending_challenge_id, updated_at = now()`,
+    [userId, challengeId],
+  );
+}
+
+async function getPendingChallenge(userId) {
+  if (!db) return pendingChallenges.get(userId);
+  const r = await db.query("select pending_challenge_id from bot_context where user_id = $1", [userId]);
+  return r.rows[0]?.pending_challenge_id;
+}
+
+async function clearPendingChallenge(userId) {
+  if (!db) {
+    pendingChallenges.delete(userId);
+    return;
+  }
+  await db.query("update bot_context set pending_challenge_id = null, updated_at = now() where user_id = $1", [userId]);
+}
+
 async function handleUpdate(update) {
   const msg = update.message;
   if (!msg?.text) return;
@@ -89,7 +132,7 @@ async function handleUpdate(update) {
     return;
   }
 
-  const pendingChallengeId = pendingChallenges.get(userId);
+  const pendingChallengeId = await getPendingChallenge(userId);
   const looksLikeBareAnswer = !!pendingChallengeId && /^[a-zA-Z0-9]{3,8}$/.test(text);
 
   const endpoint = (text.startsWith("confirm ") || looksLikeBareAnswer) ? "/v1/chat/confirm" : "/v1/chat/message";
@@ -115,9 +158,9 @@ async function handleUpdate(update) {
       : "";
 
     if (data.challengeId) {
-      pendingChallenges.set(userId, data.challengeId);
+      await setPendingChallenge(userId, data.challengeId);
     } else if (endpoint === "/v1/chat/confirm" && status < 400) {
-      pendingChallenges.delete(userId);
+      await clearPendingChallenge(userId);
     }
 
     if (status === 429) {
@@ -158,9 +201,19 @@ async function setupWebhook() {
   console.log("[clenja-bot] webhook set:", r.ok ? "ok" : r);
 }
 
-if (MODE === "webhook") {
-  setupWebhook();
-} else {
-  console.log("[clenja-bot] telegram polling started");
-  poll();
+async function boot() {
+  try {
+    await initDb();
+    if (MODE === "webhook") {
+      await setupWebhook();
+    } else {
+      console.log("[clenja-bot] telegram polling started");
+      await poll();
+    }
+  } catch (e) {
+    console.error("[clenja-bot] boot error", e);
+    process.exit(1);
+  }
 }
+
+boot();
