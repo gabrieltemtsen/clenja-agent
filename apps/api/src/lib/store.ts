@@ -214,5 +214,12 @@ export const store = {
       db.recipients = db.recipients.slice(0, 10000);
     }
     writeDb(db);
+  },
+  deleteRecipient(userId: string, name: string) {
+    const db = readDb();
+    const before = db.recipients.length;
+    db.recipients = db.recipients.filter((r) => !(r.userId === userId && r.name.toLowerCase() === name.toLowerCase()));
+    writeDb(db);
+    return before !== db.recipients.length;
   }
 };

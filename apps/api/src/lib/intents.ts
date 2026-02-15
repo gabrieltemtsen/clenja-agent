@@ -8,6 +8,8 @@ export type Intent =
   | { kind: "sendability_check" }
   | { kind: "list_recipients" }
   | { kind: "save_recipient"; name: string; address: string }
+  | { kind: "delete_recipient"; name: string }
+  | { kind: "update_recipient"; name: string; address: string }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
@@ -16,6 +18,8 @@ export type Intent =
 const sendRegex = /(send|transfer)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to\s+)?(?:this\s+address\s*:?\s*)?(0x[a-fA-F0-9]{40})/i;
 const sendToNameRegex = /(send|transfer)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+to\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})/i;
 const saveRecipientRegex = /(?:save\s+recipient|save\s+beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})\s+(0x[a-fA-F0-9]{40})/i;
+const updateRecipientRegex = /(?:update\s+recipient|update\s+beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})\s+(0x[a-fA-F0-9]{40})/i;
+const deleteRecipientRegex = /(?:delete|remove)\s+(?:recipient|beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
 
 function normalizeToken(token: string): "cUSD" | "CELO" {
@@ -35,6 +39,14 @@ export function parseIntent(text: string): Intent {
   const sv = c.match(saveRecipientRegex);
   if (sv) {
     return { kind: "save_recipient", name: sv[1].trim(), address: sv[2] };
+  }
+  const uv = c.match(updateRecipientRegex);
+  if (uv) {
+    return { kind: "update_recipient", name: uv[1].trim(), address: uv[2] };
+  }
+  const dv = c.match(deleteRecipientRegex);
+  if (dv) {
+    return { kind: "delete_recipient", name: dv[1].trim() };
   }
 
   const s = c.match(sendRegex);

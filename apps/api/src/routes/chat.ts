@@ -73,8 +73,13 @@ chatRouter.post("/message", async (req, res) => {
   }
 
   if (intent.kind === "history") {
-    const receipts = store.listReceipts(userId).slice(0, 10);
-    return res.json({ reply: `🧾 Found ${receipts.length} recent records.`, receipts });
+    const receipts = store.listReceipts(userId).slice(0, 5);
+    if (!receipts.length) return res.json({ reply: "No transactions yet." });
+    const lines = receipts.map((r) => {
+      const link = r.ref.startsWith("0x") ? `https://celoscan.io/tx/${r.ref}` : r.ref;
+      return `• ${r.kind.toUpperCase()} ${r.amount} ${r.token} — ${link}`;
+    });
+    return res.json({ reply: `Recent transactions:\n${lines.join("\n")}`, receipts });
   }
 
   if (intent.kind === "save_recipient") {
@@ -87,6 +92,25 @@ chatRouter.post("/message", async (req, res) => {
       updatedAt: Date.now(),
     });
     return res.json({ reply: `✅ Saved recipient '${intent.name}' (${intent.address.slice(0, 6)}...${intent.address.slice(-4)}).` });
+  }
+
+  if (intent.kind === "update_recipient") {
+    const exists = store.listRecipients(userId).some((r) => r.name.toLowerCase() === intent.name.toLowerCase());
+    if (!exists) return res.json({ reply: `I couldn't find recipient '${intent.name}'.` });
+    store.upsertRecipient({
+      id: `rcp_${Date.now()}`,
+      userId,
+      name: intent.name,
+      address: intent.address,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return res.json({ reply: `✅ Updated '${intent.name}' to ${intent.address.slice(0, 6)}...${intent.address.slice(-4)}.` });
+  }
+
+  if (intent.kind === "delete_recipient") {
+    const ok = store.deleteRecipient(userId, intent.name);
+    return res.json({ reply: ok ? `🗑️ Deleted recipient '${intent.name}'.` : `I couldn't find recipient '${intent.name}'.` });
   }
 
   if (intent.kind === "list_recipients") {
