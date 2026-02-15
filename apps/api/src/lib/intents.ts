@@ -10,6 +10,7 @@ export type Intent =
   | { kind: "save_recipient"; name: string; address: string }
   | { kind: "delete_recipient"; name: string }
   | { kind: "update_recipient"; name: string; address: string }
+  | { kind: "confirm_yes" }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
@@ -34,6 +35,7 @@ export function parseIntent(text: string): Intent {
   if (/history|my transactions|receipts/i.test(c)) return { kind: "history" };
   if (/status|system status|readiness/i.test(c)) return { kind: "status" };
   if (/^(hi|hello|hey)\b/i.test(c) || /how are you/i.test(c)) return { kind: "greeting" };
+  if (/^(yes|confirm|ok)$/i.test(c)) return { kind: "confirm_yes" };
   if (/list recipients|list beneficiaries|my recipients|saved recipients/i.test(c)) return { kind: "list_recipients" };
 
   const sv = c.match(saveRecipientRegex);

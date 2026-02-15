@@ -70,3 +70,8 @@ test("parse delete recipient intent", () => {
   const i = parseIntent("delete recipient Gabriel");
   assert.equal(i.kind, "delete_recipient");
 });
+
+test("parse confirm yes intent", () => {
+  const i = parseIntent("YES");
+  assert.equal(i.kind, "confirm_yes");
+});
