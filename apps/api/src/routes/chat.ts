@@ -51,7 +51,7 @@ chatRouter.post("/message", async (req, res) => {
       const b = await wallet.getBalance(userId);
       return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -64,7 +64,7 @@ chatRouter.post("/message", async (req, res) => {
         : "Not yet — you currently have 0 CELO. Fund your wallet first, then I can send instantly.";
       return res.json({ reply, data: b });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -78,7 +78,7 @@ chatRouter.post("/message", async (req, res) => {
       const w = await wallet.createOrLinkUserWallet(userId);
       return res.json({ reply: `🏦 Wallet address: ${w.walletAddress}`, walletAddress: w.walletAddress });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
@@ -99,7 +99,7 @@ chatRouter.post("/message", async (req, res) => {
       const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
       return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
-      return res.status(502).json({ reply: toUserFacingProviderError(e, "para") });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }
 
