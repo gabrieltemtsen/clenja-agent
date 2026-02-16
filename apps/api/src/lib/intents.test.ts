@@ -95,3 +95,13 @@ test("parse pause and resume intents", () => {
   assert.equal(parseIntent("pause sending").kind, "pause_sending");
   assert.equal(parseIntent("resume sending").kind, "resume_sending");
 });
+
+test("parse swap intent", () => {
+  const i = parseIntent("swap 10 celo to cusd");
+  assert.equal(i.kind, "swap");
+  if (i.kind === "swap") {
+    assert.equal(i.fromToken, "CELO");
+    assert.equal(i.toToken, "cUSD");
+    assert.equal(i.amount, "10");
+  }
+});

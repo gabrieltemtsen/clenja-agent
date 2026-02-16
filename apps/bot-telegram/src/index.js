@@ -14,8 +14,9 @@ const COMMAND_KEYBOARD = {
   keyboard: [
     [{ text: "💰 Balance" }, { text: "🏦 Address" }],
     [{ text: "👥 Recipients" }, { text: "📒 History" }],
-    [{ text: "💸 Send" }, { text: "🏧 Cashout" }],
-    [{ text: "⚙️ Limits" }, { text: "❓ Help" }],
+    [{ text: "💸 Send" }, { text: "🔄 Swap" }],
+    [{ text: "🏧 Cashout" }, { text: "⚙️ Limits" }],
+    [{ text: "❓ Help" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -78,6 +79,7 @@ function normalizeUiCommand(text) {
   if (t.includes("cashout")) return "cashout 50 cUSD";
   if (t.includes("help")) return "/help";
   if (t.includes("send")) return "send 1 CELO to 0x...";
+  if (t.includes("swap") || t.includes("convert")) return "swap 1 CELO to cUSD";
   if (t.includes("limits")) return "show limits";
   return text;
 }
@@ -153,7 +155,7 @@ async function handleUpdate(update) {
   if (rawText === "/help" || text === "/help") {
     await sendMessage(
       msg.chat.id,
-      "Available:\n• balance\n• address\n• history\n• recipients (save/list/update/delete)\n• send <amount> <cUSD|CELO> to <address|name>\n• cashout <amount> <cUSD|CELO>\n• reply with confirmation code when prompted",
+      "Available:\n• balance\n• address\n• history\n• recipients (save/list/update/delete)\n• send <amount> <cUSD|CELO> to <address|name>\n• swap <amount> <CELO|cUSD> to <CELO|cUSD>\n• cashout <amount> <cUSD|CELO>\n• reply with confirmation code when prompted",
       msg.message_id,
       true,
     );

@@ -42,7 +42,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, recipients, limits, and cashout. Try: 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD'."
+      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD'."
     });
   }
 
@@ -176,6 +176,26 @@ chatRouter.post("/message", async (req, res) => {
     return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
   }
 
+  if (intent.kind === "swap") {
+    if (intent.fromToken === intent.toToken) return res.json({ reply: "From and to token are the same. Try CELO -> cUSD or cUSD -> CELO." });
+
+    const pc = checkPolicy({ userId, action: "send", amount: Number(intent.amount), token: intent.fromToken as "CELO" | "cUSD" });
+    if (!pc.ok) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.blocked", status: "error", detail: { reason: pc.reason } });
+      return res.json({ reply: `Blocked by policy: ${pc.reason}` });
+    }
+
+    try {
+      const quote = await wallet.prepareSwap({ fromUserId: userId, fromToken: intent.fromToken as "CELO" | "cUSD", toToken: intent.toToken as "CELO" | "cUSD", amountIn: intent.amount, slippageBps: 100 });
+      const expected = Number(quote.amountOut);
+      const code = String(Math.round(expected * 10000)).slice(-4).padStart(4, "0");
+      const ch = createChallenge({ userId, type: "new_recipient_last4", expected: code, context: { kind: "swap", quoteId: quote.quoteId, fromToken: intent.fromToken, toToken: intent.toToken, amountIn: intent.amount, minAmountOut: quote.minAmountOut } });
+      return res.json({ reply: `Swap quote: ${intent.amount} ${intent.fromToken} -> ~${quote.amountOut} ${intent.toToken} (min ${quote.minAmountOut}). Confirm with code ${code}.`, challengeId: ch.id, action: "awaiting_confirmation" });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
+    }
+  }
+
   if (intent.kind === "send_to_recipient") {
     const recipients = store.listRecipients(userId).filter((r) => fuzzyIncludes(r.name, intent.recipientName));
     if (recipients.length === 0) {
@@ -275,6 +295,20 @@ chatRouter.post("/confirm", async (req, res) => {
       return res.json({ reply: `✅ Sent ${ctx.amount} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${tx.txHash}\n${txUrl}`, txHash: tx.txHash, txUrl });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
+    }
+  }
+
+  if (ctx.kind === "swap") {
+    try {
+      const tx = await wallet.executeSwap({ userId, quoteId: ctx.quoteId, fromToken: ctx.fromToken, toToken: ctx.toToken, amountIn: ctx.amountIn, minAmountOut: ctx.minAmountOut });
+      recordPolicySpend(userId, Number(ctx.amountIn));
+      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "swap", amount: String(ctx.amountIn), token: `${ctx.fromToken}->${ctx.toToken}`, ref: tx.txHash, createdAt: Date.now() });
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "ok", detail: { txHash: tx.txHash } });
+      const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
+      return res.json({ reply: `✅ Swapped ${ctx.amountIn} ${ctx.fromToken} to ${ctx.toToken}.\nTx: ${tx.txHash}\n${txUrl}`, txHash: tx.txHash, txUrl });
+    } catch (e) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
   }

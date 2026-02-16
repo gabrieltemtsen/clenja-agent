@@ -13,6 +13,9 @@ importers:
       '@getpara/server-sdk':
         specifier: ^2.11.0
         version: 2.11.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      '@mento-protocol/mento-sdk':
+        specifier: ^1.0.0
+        version: 1.19.0(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       '@turnkey/sdk-server':
         specifier: ^5.0.3
         version: 5.0.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
@@ -669,6 +672,15 @@ packages:
 
   '@lit/reactive-element@2.1.2':
     resolution: {integrity: sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A==}
+
+  '@mento-protocol/mento-core-ts@2.6.5-rc3':
+    resolution: {integrity: sha512-BMVPXKIFBw8BOoNWBODhDi6odIIBBU16guTzkNnDheFaeiExyBVIe+HpVc7vjvWgMbhESuDpN9tDmvzyjiN8Dg==}
+
+  '@mento-protocol/mento-sdk@1.19.0':
+    resolution: {integrity: sha512-+D94LFomVDdsKchyG/+dDmv7/UfGiBCiYR35bMLqwi13u700lKDb2c1y0B4njKLdBadOVglDBkslMneFVASSkw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      ethers: ^5.7
 
   '@metamask/eth-json-rpc-provider@1.0.1':
     resolution: {integrity: sha512-whiUMPlAOrVGmX8aKYVPvlKyG4CpQXiNNyt74vE1xb5sPvmx5oA7B/kOi/JdBvhGQq97U1/AVdXEdk2zkP8qyA==}
@@ -3123,6 +3135,9 @@ packages:
     resolution: {integrity: sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==}
     engines: {node: '>= 0.6'}
 
+  mento-router-ts@0.2.0:
+    resolution: {integrity: sha512-wE142p1CSZSmqavPrkB3F++1/h/V6QNMm9wtFf9tdu3/4FgtkByFUOGmyIOaQVFldHle0POfZqC7KM5j3ZQgKA==}
+
   merge-descriptors@1.0.3:
     resolution: {integrity: sha512-gaNvAS7TZ897/rVaZ0nMtAyxNyi/pdbjbAwUpFQpN70GqnVfOiXpeUUMKRBmzXaSQ8DdTX4/0ms62r2K+hE6mQ==}
 
@@ -5136,6 +5151,14 @@ snapshots:
   '@lit/reactive-element@2.1.2':
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.5.1
+
+  '@mento-protocol/mento-core-ts@2.6.5-rc3': {}
+
+  '@mento-protocol/mento-sdk@1.19.0(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))':
+    dependencies:
+      '@mento-protocol/mento-core-ts': 2.6.5-rc3
+      ethers: 6.16.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      mento-router-ts: 0.2.0
 
   '@metamask/eth-json-rpc-provider@1.0.1':
     dependencies:
@@ -8880,6 +8903,8 @@ snapshots:
       is-buffer: 1.1.6
 
   media-typer@0.3.0: {}
+
+  mento-router-ts@0.2.0: {}
 
   merge-descriptors@1.0.3: {}
 

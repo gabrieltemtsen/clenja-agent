@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Turnkey } from "@turnkey/sdk-server";
-import { Interface, Transaction, parseUnits } from "ethers";
-import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult } from "./wallet.js";
+import { Interface, Transaction, parseUnits, formatUnits, JsonRpcProvider } from "ethers";
+import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult, PrepareSwapInput, PrepareSwapResult } from "./wallet.js";
 import { safetyConfig, turnkeyConfig } from "../lib/config.js";
 import { store } from "../lib/store.js";
 
@@ -22,7 +22,10 @@ export function getTurnkeyLiveStatus() {
 }
 
 const CUSD_TOKEN_ADDRESS = process.env.CUSD_TOKEN_ADDRESS || "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+const CELO_TOKEN_ADDRESS = process.env.CELO_TOKEN_ADDRESS || "0x471EcE3750Da237f93B8E339c536989b8978a438";
 const CELO_CHAIN_ID = Number(process.env.CELO_CHAIN_ID || 42220);
+
+const swapQuoteCache = new Map<string, { fromToken: "CELO" | "cUSD"; toToken: "CELO" | "cUSD"; amountIn: string; minAmountOut: string; createdAt: number }>();
 
 function assertConfig() {
   const missing = !turnkeyConfig.organizationId || !turnkeyConfig.apiPublicKey || !turnkeyConfig.apiPrivateKey;
@@ -60,6 +63,51 @@ async function rpc(method: string, params: any[]) {
   const data = await r.json();
   if (data.error) throw new Error(`rpc_${data.error?.code || "error"}`);
   return data.result;
+}
+
+async function mentoClient() {
+  const mod = await import("@mento-protocol/mento-sdk");
+  const Mento = (mod as any).Mento;
+  if (!Mento) throw new Error("mento_sdk_unavailable");
+  const provider = new JsonRpcProvider(turnkeyConfig.celoRpcUrl);
+  return Mento.create(provider as any);
+}
+
+async function sendTurnkeyTx(userId: string, address: string, walletId: string, txReq: any) {
+  const nonceHex = await rpc("eth_getTransactionCount", [address, "pending"]);
+  const gasPriceHex = await rpc("eth_gasPrice", []);
+
+  const unsignedTx = Transaction.from({
+    chainId: CELO_CHAIN_ID,
+    nonce: Number(BigInt(nonceHex)),
+    gasPrice: BigInt(gasPriceHex),
+    gasLimit: txReq.gasLimit ? BigInt(txReq.gasLimit) : BigInt(300000),
+    to: txReq.to,
+    value: BigInt(txReq.value || 0),
+    data: txReq.data,
+  }).unsignedSerialized;
+
+  const signed = await client().signTransaction({
+    signWith: address,
+    unsignedTransaction: unsignedTx,
+    type: "TRANSACTION_TYPE_ETHEREUM",
+    timestampMs: nowMs(),
+  });
+
+  let rawSigned = String((signed as any)?.signedTransaction || "").trim();
+  if (!rawSigned) throw new Error("turnkey_sign_failed");
+  if (!rawSigned.startsWith("0x")) rawSigned = `0x${rawSigned}`;
+
+  const txHash = await rpc("eth_sendRawTransaction", [rawSigned]);
+  store.addAudit({
+    id: `aud_${Date.now()}`,
+    ts: Date.now(),
+    userId,
+    action: "turnkey.tx",
+    status: "ok",
+    detail: { txHash, walletId, to: txReq.to },
+  });
+  return String(txHash);
 }
 
 async function getOrCreateWallet(userId: string): Promise<{ address: string; walletId: string }> {
@@ -179,41 +227,20 @@ export class TurnkeyWalletProvider implements WalletProvider {
   async executeSend(input: { userId: string; quoteId: string; to: string; token: "CELO" | "cUSD"; amount: string }) {
     const { walletId, address } = await getOrCreateWallet(input.userId);
 
-    const nonceHex = await rpc("eth_getTransactionCount", [address, "pending"]);
-    const gasPriceHex = await rpc("eth_gasPrice", []);
-
-    const txReq: any = {
-      chainId: CELO_CHAIN_ID,
-      nonce: Number(BigInt(nonceHex)),
-      gasPrice: BigInt(gasPriceHex),
-    };
-
+    const txReq: any = {};
     if (input.token === "CELO") {
       txReq.to = input.to;
       txReq.value = parseUnits(input.amount, 18);
-      txReq.gasLimit = BigInt(21000);
+      txReq.gasLimit = 21000;
     } else {
       const erc20 = new Interface(["function transfer(address to, uint256 amount)"]);
       txReq.to = CUSD_TOKEN_ADDRESS;
       txReq.value = 0n;
       txReq.data = erc20.encodeFunctionData("transfer", [input.to, parseUnits(input.amount, 18)]);
-      txReq.gasLimit = BigInt(120000);
+      txReq.gasLimit = 120000;
     }
 
-    const unsignedTx = Transaction.from(txReq).unsignedSerialized;
-
-    const signed = await client().signTransaction({
-      signWith: address,
-      unsignedTransaction: unsignedTx,
-      type: "TRANSACTION_TYPE_ETHEREUM",
-      timestampMs: nowMs(),
-    });
-
-    let rawSigned = String((signed as any)?.signedTransaction || "").trim();
-    if (!rawSigned) throw new Error("turnkey_sign_failed");
-    if (!rawSigned.startsWith("0x")) rawSigned = `0x${rawSigned}`;
-
-    const txHash = await rpc("eth_sendRawTransaction", [rawSigned]);
+    const txHash = await sendTurnkeyTx(input.userId, address, walletId, txReq);
 
     store.addAudit({
       id: `aud_${Date.now()}`,
@@ -229,5 +256,63 @@ export class TurnkeyWalletProvider implements WalletProvider {
       txHash: String(txHash),
       status: "submitted" as const,
     };
+  }
+
+  async prepareSwap(input: PrepareSwapInput): Promise<PrepareSwapResult> {
+    if (input.fromToken === input.toToken) throw new Error("swap_same_token_not_allowed");
+    const mento = await mentoClient();
+    const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
+    const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
+    const amountInWei = parseUnits(input.amountIn, 18);
+    const amountOutWei = await (mento as any).getAmountOut(fromAddr, toAddr, amountInWei);
+    const slippageBps = input.slippageBps ?? 100;
+    const minOutWei = (BigInt(String(amountOutWei)) * BigInt(10000 - slippageBps)) / 10000n;
+    const quoteId = `swap_${randomUUID()}`;
+
+    swapQuoteCache.set(quoteId, {
+      fromToken: input.fromToken,
+      toToken: input.toToken,
+      amountIn: input.amountIn,
+      minAmountOut: formatUnits(minOutWei, 18),
+      createdAt: Date.now(),
+    });
+
+    return {
+      quoteId,
+      amountOut: formatUnits(amountOutWei, 18),
+      minAmountOut: formatUnits(minOutWei, 18),
+      route: "mento",
+    };
+  }
+
+  async executeSwap(input: { userId: string; quoteId: string; fromToken: "CELO" | "cUSD"; toToken: "CELO" | "cUSD"; amountIn: string; minAmountOut: string }) {
+    const cached = swapQuoteCache.get(input.quoteId);
+    if (!cached) throw new Error("swap_quote_expired");
+
+    const { walletId, address } = await getOrCreateWallet(input.userId);
+    const mento = await mentoClient();
+    const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
+    const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
+
+    const amountInWei = parseUnits(input.amountIn, 18);
+    const minOutWei = parseUnits(input.minAmountOut, 18);
+
+    const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
+    await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
+
+    const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
+    const txHash = await sendTurnkeyTx(input.userId, address, walletId, swapTxObj);
+    swapQuoteCache.delete(input.quoteId);
+
+    store.addAudit({
+      id: `aud_${Date.now()}`,
+      ts: Date.now(),
+      userId: input.userId,
+      action: "turnkey.swap",
+      status: "ok",
+      detail: { txHash, walletId, fromToken: input.fromToken, toToken: input.toToken, amountIn: input.amountIn, minAmountOut: input.minAmountOut },
+    });
+
+    return { txHash, status: "submitted" as const };
   }
 }
