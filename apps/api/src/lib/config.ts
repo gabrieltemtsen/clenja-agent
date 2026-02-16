@@ -38,7 +38,11 @@ export const safetyConfig = {
 };
 
 export const walletConfig = {
-  provider: (process.env.WALLET_PROVIDER || "para").toLowerCase() as "para" | "turnkey" | "mock",
+  provider: (process.env.WALLET_PROVIDER || "para").toLowerCase() as "para" | "turnkey" | "goat" | "mock",
+};
+
+export const executionConfig = {
+  engine: (process.env.EXECUTION_ENGINE || "legacy").toLowerCase() as "legacy" | "goat",
 };
 
 export const turnkeyConfig = {
