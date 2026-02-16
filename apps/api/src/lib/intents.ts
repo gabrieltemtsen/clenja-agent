@@ -11,6 +11,11 @@ export type Intent =
   | { kind: "delete_recipient"; name: string }
   | { kind: "update_recipient"; name: string; address: string }
   | { kind: "confirm_yes" }
+  | { kind: "show_limits" }
+  | { kind: "set_daily_limit"; amount: string }
+  | { kind: "set_per_tx_limit"; amount: string }
+  | { kind: "pause_sending" }
+  | { kind: "resume_sending" }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
@@ -21,6 +26,8 @@ const sendToNameRegex = /(send|transfer)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+to\s+
 const saveRecipientRegex = /(?:save\s+recipient|save\s+beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})\s+(0x[a-fA-F0-9]{40})/i;
 const updateRecipientRegex = /(?:update\s+recipient|update\s+beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})\s+(0x[a-fA-F0-9]{40})/i;
 const deleteRecipientRegex = /(?:delete|remove)\s+(?:recipient|beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})/i;
+const setDailyLimitRegex = /set\s+daily\s+limit\s+(\d+(?:\.\d+)?)/i;
+const setPerTxLimitRegex = /set\s+(?:per[- ]?tx|transaction)\s+limit\s+(\d+(?:\.\d+)?)/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
 
 function normalizeToken(token: string): "cUSD" | "CELO" {
@@ -36,7 +43,15 @@ export function parseIntent(text: string): Intent {
   if (/status|system status|readiness/i.test(c)) return { kind: "status" };
   if (/^(hi|hello|hey)\b/i.test(c) || /how are you/i.test(c)) return { kind: "greeting" };
   if (/^(yes|confirm|ok)$/i.test(c)) return { kind: "confirm_yes" };
+  if (/show limits|my limits|limits/i.test(c)) return { kind: "show_limits" };
+  if (/pause sending|pause transfers|stop sending/i.test(c)) return { kind: "pause_sending" };
+  if (/resume sending|resume transfers|enable sending/i.test(c)) return { kind: "resume_sending" };
   if (/list recipients|list beneficiaries|my recipients|saved recipients/i.test(c)) return { kind: "list_recipients" };
+
+  const dl = c.match(setDailyLimitRegex);
+  if (dl) return { kind: "set_daily_limit", amount: dl[1] };
+  const ptl = c.match(setPerTxLimitRegex);
+  if (ptl) return { kind: "set_per_tx_limit", amount: ptl[1] };
 
   const sv = c.match(saveRecipientRegex);
   if (sv) {

@@ -75,3 +75,23 @@ test("parse confirm yes intent", () => {
   const i = parseIntent("YES");
   assert.equal(i.kind, "confirm_yes");
 });
+
+test("parse show limits intent", () => {
+  const i = parseIntent("show limits");
+  assert.equal(i.kind, "show_limits");
+});
+
+test("parse set daily limit intent", () => {
+  const i = parseIntent("set daily limit 50");
+  assert.equal(i.kind, "set_daily_limit");
+});
+
+test("parse set per tx limit intent", () => {
+  const i = parseIntent("set per-tx limit 20");
+  assert.equal(i.kind, "set_per_tx_limit");
+});
+
+test("parse pause and resume intents", () => {
+  assert.equal(parseIntent("pause sending").kind, "pause_sending");
+  assert.equal(parseIntent("resume sending").kind, "resume_sending");
+});

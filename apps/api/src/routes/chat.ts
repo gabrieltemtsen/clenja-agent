@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { routeIntent } from "../lib/intentRouter.js";
-import { checkPolicy, recordPolicySpend } from "../lib/policy.js";
+import { checkPolicy, getUserPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { makeWalletProvider } from "../adapters/provider.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
@@ -42,7 +42,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, recipients, and cashout. Try: 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients', or 'cashout 50 cUSD'."
+      reply: "I can help with balances, transfers, recipients, limits, and cashout. Try: 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD'."
     });
   }
 
@@ -67,6 +67,35 @@ chatRouter.post("/message", async (req, res) => {
       store.clearPendingAction(userId);
       return res.json({ reply: ok ? `🗑️ Deleted recipient '${name}'.` : `I couldn't find recipient '${name}'.` });
     }
+  }
+
+  if (intent.kind === "show_limits") {
+    const p = getUserPolicy(userId);
+    return res.json({ reply: `Limits:\n• Daily: $${p.dailyLimitUsd}\n• Per-tx: $${p.perTxLimitUsd}\n• Sending: ${p.paused ? "paused" : "active"}` });
+  }
+
+  if (intent.kind === "set_daily_limit") {
+    const amount = Number(intent.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.json({ reply: "Please provide a valid daily limit amount." });
+    const p = store.upsertUserPolicy(userId, { dailyLimitUsd: amount });
+    return res.json({ reply: `✅ Daily limit set to $${p.dailyLimitUsd}.` });
+  }
+
+  if (intent.kind === "set_per_tx_limit") {
+    const amount = Number(intent.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.json({ reply: "Please provide a valid per-tx limit amount." });
+    const p = store.upsertUserPolicy(userId, { perTxLimitUsd: amount });
+    return res.json({ reply: `✅ Per-tx limit set to $${p.perTxLimitUsd}.` });
+  }
+
+  if (intent.kind === "pause_sending") {
+    store.upsertUserPolicy(userId, { paused: true });
+    return res.json({ reply: "⏸️ Sending paused. Reply 'resume sending' when ready." });
+  }
+
+  if (intent.kind === "resume_sending") {
+    store.upsertUserPolicy(userId, { paused: false });
+    return res.json({ reply: "▶️ Sending resumed." });
   }
 
   if (intent.kind === "balance") {
