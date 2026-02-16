@@ -14,5 +14,14 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
   if (msg.includes("rpc_-32602")) {
     return `${label} rejected the transaction format. Please retry; if it persists, check wallet signing config.`;
   }
+  if (msg.includes("swap_quote_expired")) {
+    return `${label} swap quote expired. Please request a new swap quote.`;
+  }
+  if (msg.includes("goat_turnkey_sign") || msg.includes("turnkey_sign_failed")) {
+    return `${label} signing failed. Please retry in a few seconds.`;
+  }
+  if (msg.includes("mento_sdk_unavailable")) {
+    return `${label} swap engine is unavailable right now. Please retry shortly.`;
+  }
   return `${label} request failed. Please retry.`;
 }
