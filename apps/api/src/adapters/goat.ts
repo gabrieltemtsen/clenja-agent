@@ -4,6 +4,7 @@ import type { EvmChain, Signature } from "@goat-sdk/core";
 import { EVMWalletClient, type EVMReadRequest, type EVMReadResult, type EVMTransaction, type EVMTypedData } from "@goat-sdk/wallet-evm";
 import { ethers } from "ethers";
 import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult, PrepareSwapInput, PrepareSwapResult } from "./wallet.js";
+import { TurnkeyWalletProvider } from "./turnkey.js";
 import { store } from "../lib/store.js";
 import { turnkeyConfig } from "../lib/config.js";
 
@@ -176,6 +177,8 @@ class GoatTurnkeyEvmWalletClient extends EVMWalletClient {
 }
 
 export class GoatWalletProvider implements WalletProvider {
+  private readonly legacy = new TurnkeyWalletProvider();
+
   private async getGoatClient(userId: string) {
     const { address, walletId } = await getOrCreateWallet(userId);
     return new GoatTurnkeyEvmWalletClient(address as `0x${string}`, walletId, userId);
@@ -224,60 +227,20 @@ export class GoatWalletProvider implements WalletProvider {
   }
 
   async prepareSwap(input: PrepareSwapInput): Promise<PrepareSwapResult> {
-    if (input.fromToken === input.toToken) throw new Error("swap_same_token_not_allowed");
-    const mento = await mentoClient();
-    const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
-    const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
-    const amountInWei = ethers.utils.parseUnits(input.amountIn, 18);
-    const amountOutWei = await (mento as any).getAmountOut(fromAddr, toAddr, amountInWei);
-    const slippageBps = input.slippageBps ?? 100;
-    const minOutWei = amountOutWei.mul(10000 - slippageBps).div(10000);
-    const quoteId = `swap_${randomUUID()}`;
-
-    swapQuoteCache.set(quoteId, {
-      fromToken: input.fromToken,
-      toToken: input.toToken,
-      amountIn: input.amountIn,
-      minAmountOut: ethers.utils.formatUnits(minOutWei, 18),
-      createdAt: Date.now(),
-    });
-
-    return {
-      quoteId,
-      amountOut: ethers.utils.formatUnits(amountOutWei, 18),
-      minAmountOut: ethers.utils.formatUnits(minOutWei, 18),
-      route: "goat+mento",
-    };
+    // Temporary safety fallback: GOAT handles wallet/send natively; swap uses proven Turnkey+Mento path.
+    return this.legacy.prepareSwap(input);
   }
 
   async executeSwap(input: { userId: string; quoteId: string; fromToken: "CELO" | "cUSD"; toToken: "CELO" | "cUSD"; amountIn: string; minAmountOut: string }): Promise<{ txHash: string; status: "submitted" | "confirmed" }> {
-    const cached = swapQuoteCache.get(input.quoteId);
-    if (!cached) throw new Error("swap_quote_expired");
-
-    const c = await this.getGoatClient(input.userId);
-    const mento = await mentoClient();
-    const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
-    const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
-
-    const amountInWei = ethers.utils.parseUnits(input.amountIn, 18);
-    const minOutWei = ethers.utils.parseUnits(input.minAmountOut, 18);
-
-    const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
-    await c.sendTransaction(allowanceTxObj as any);
-
-    const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
-    const swapTx = await c.sendTransaction(swapTxObj as any);
-    swapQuoteCache.delete(input.quoteId);
-
+    const r = await this.legacy.executeSwap(input);
     store.addAudit({
       id: `aud_${Date.now()}`,
       ts: Date.now(),
       userId: input.userId,
-      action: "goat.wallet.executeSwap",
+      action: "goat.wallet.executeSwap.fallback_legacy",
       status: "ok",
-      detail: { txHash: swapTx.hash, fromToken: input.fromToken, toToken: input.toToken, amountIn: input.amountIn, minAmountOut: input.minAmountOut },
+      detail: { txHash: r.txHash, fromToken: input.fromToken, toToken: input.toToken, amountIn: input.amountIn },
     });
-
-    return { txHash: swapTx.hash, status: "submitted" };
+    return r;
   }
 }
