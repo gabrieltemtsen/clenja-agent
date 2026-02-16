@@ -14,6 +14,9 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
   if (msg.includes("rpc_-32602")) {
     return `${label} rejected the transaction format. Please retry; if it persists, check wallet signing config.`;
   }
+  if (msg.toLowerCase().includes("revert") || msg.toLowerCase().includes("rpc_-32000")) {
+    return `${label} transaction reverted onchain. Please retry with a smaller amount or refresh quote.`;
+  }
   if (msg.includes("swap_quote_expired")) {
     return `${label} swap quote expired. Please request a new swap quote.`;
   }
