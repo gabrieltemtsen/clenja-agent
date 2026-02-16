@@ -16,7 +16,7 @@
     "@mento-protocol/mento-sdk": "^1.0.0",
     "@turnkey/sdk-server": "^5.0.3",
     "dotenv": "^16.4.5",
-    "ethers": "^6.15.0",
+    "ethers": "^5.7.2",
     "express": "^4.21.2",
     "thirdweb": "^5.104.2",
     "zod": "^3.24.1"

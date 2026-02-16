@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Turnkey } from "@turnkey/sdk-server";
-import { Interface, Transaction, parseUnits, formatUnits, JsonRpcProvider } from "ethers";
+import { ethers } from "ethers";
 import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult, PrepareSwapInput, PrepareSwapResult } from "./wallet.js";
 import { safetyConfig, turnkeyConfig } from "../lib/config.js";
 import { store } from "../lib/store.js";
@@ -69,7 +69,7 @@ async function mentoClient() {
   const mod = await import("@mento-protocol/mento-sdk");
   const Mento = (mod as any).Mento;
   if (!Mento) throw new Error("mento_sdk_unavailable");
-  const provider = new JsonRpcProvider(turnkeyConfig.celoRpcUrl);
+  const provider = new ethers.providers.JsonRpcProvider(turnkeyConfig.celoRpcUrl);
   return Mento.create(provider as any);
 }
 
@@ -77,15 +77,15 @@ async function sendTurnkeyTx(userId: string, address: string, walletId: string, 
   const nonceHex = await rpc("eth_getTransactionCount", [address, "pending"]);
   const gasPriceHex = await rpc("eth_gasPrice", []);
 
-  const unsignedTx = Transaction.from({
+  const unsignedTx = ethers.utils.serializeTransaction({
     chainId: CELO_CHAIN_ID,
     nonce: Number(BigInt(nonceHex)),
-    gasPrice: BigInt(gasPriceHex),
-    gasLimit: txReq.gasLimit ? BigInt(txReq.gasLimit) : BigInt(300000),
+    gasPrice: gasPriceHex,
+    gasLimit: txReq.gasLimit || 300000,
     to: txReq.to,
-    value: BigInt(txReq.value || 0),
+    value: txReq.value || 0,
     data: txReq.data,
-  }).unsignedSerialized;
+  });
 
   const signed = await client().signTransaction({
     signWith: address,
@@ -230,13 +230,13 @@ export class TurnkeyWalletProvider implements WalletProvider {
     const txReq: any = {};
     if (input.token === "CELO") {
       txReq.to = input.to;
-      txReq.value = parseUnits(input.amount, 18);
+      txReq.value = ethers.utils.parseUnits(input.amount, 18);
       txReq.gasLimit = 21000;
     } else {
-      const erc20 = new Interface(["function transfer(address to, uint256 amount)"]);
+      const erc20 = new ethers.utils.Interface(["function transfer(address to, uint256 amount)"]);
       txReq.to = CUSD_TOKEN_ADDRESS;
-      txReq.value = 0n;
-      txReq.data = erc20.encodeFunctionData("transfer", [input.to, parseUnits(input.amount, 18)]);
+      txReq.value = 0;
+      txReq.data = erc20.encodeFunctionData("transfer", [input.to, ethers.utils.parseUnits(input.amount, 18)]);
       txReq.gasLimit = 120000;
     }
 
@@ -263,24 +263,24 @@ export class TurnkeyWalletProvider implements WalletProvider {
     const mento = await mentoClient();
     const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
     const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
-    const amountInWei = parseUnits(input.amountIn, 18);
+    const amountInWei = ethers.utils.parseUnits(input.amountIn, 18);
     const amountOutWei = await (mento as any).getAmountOut(fromAddr, toAddr, amountInWei);
     const slippageBps = input.slippageBps ?? 100;
-    const minOutWei = (BigInt(String(amountOutWei)) * BigInt(10000 - slippageBps)) / 10000n;
+    const minOutWei = amountOutWei.mul(10000 - slippageBps).div(10000);
     const quoteId = `swap_${randomUUID()}`;
 
     swapQuoteCache.set(quoteId, {
       fromToken: input.fromToken,
       toToken: input.toToken,
       amountIn: input.amountIn,
-      minAmountOut: formatUnits(minOutWei, 18),
+      minAmountOut: ethers.utils.formatUnits(minOutWei, 18),
       createdAt: Date.now(),
     });
 
     return {
       quoteId,
-      amountOut: formatUnits(amountOutWei, 18),
-      minAmountOut: formatUnits(minOutWei, 18),
+      amountOut: ethers.utils.formatUnits(amountOutWei, 18),
+      minAmountOut: ethers.utils.formatUnits(minOutWei, 18),
       route: "mento",
     };
   }
@@ -294,8 +294,8 @@ export class TurnkeyWalletProvider implements WalletProvider {
     const fromAddr = input.fromToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
     const toAddr = input.toToken === "CELO" ? CELO_TOKEN_ADDRESS : CUSD_TOKEN_ADDRESS;
 
-    const amountInWei = parseUnits(input.amountIn, 18);
-    const minOutWei = parseUnits(input.minAmountOut, 18);
+    const amountInWei = ethers.utils.parseUnits(input.amountIn, 18);
+    const minOutWei = ethers.utils.parseUnits(input.minAmountOut, 18);
 
     const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
     await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
