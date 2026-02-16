@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Para as ParaServer } from "@getpara/server-sdk";
-import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult } from "./wallet.js";
+import type { WalletProvider, WalletBalance, PrepareSendInput, PrepareSendResult, PrepareSwapInput, PrepareSwapResult } from "./wallet.js";
 import { paraConfig, safetyConfig } from "../lib/config.js";
 
 type ParaLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
@@ -146,5 +146,13 @@ export class ParaWalletProvider implements WalletProvider {
       txHash: `0x${randomUUID().replace(/-/g, "")}`,
       status: "submitted" as const,
     };
+  }
+
+  async prepareSwap(_input: PrepareSwapInput): Promise<PrepareSwapResult> {
+    throw new Error("swap_not_supported_for_provider");
+  }
+
+  async executeSwap(_input: { userId: string; quoteId: string; fromToken: "CELO" | "cUSD"; toToken: "CELO" | "cUSD"; amountIn: string; minAmountOut: string }): Promise<{ txHash: string; status: "submitted" | "confirmed" }> {
+    throw new Error("swap_not_supported_for_provider");
   }
 }

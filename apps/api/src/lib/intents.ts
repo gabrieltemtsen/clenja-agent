@@ -16,6 +16,7 @@ export type Intent =
   | { kind: "set_per_tx_limit"; amount: string }
   | { kind: "pause_sending" }
   | { kind: "resume_sending" }
+  | { kind: "swap"; amount: string; fromToken: "cUSD" | "CELO"; toToken: "cUSD" | "CELO" }
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
@@ -28,6 +29,7 @@ const updateRecipientRegex = /(?:update\s+recipient|update\s+beneficiary)\s+([a-
 const deleteRecipientRegex = /(?:delete|remove)\s+(?:recipient|beneficiary)\s+([a-zA-Z][a-zA-Z0-9 _-]{1,40})/i;
 const setDailyLimitRegex = /set\s+daily\s+limit\s+(\d+(?:\.\d+)?)/i;
 const setPerTxLimitRegex = /set\s+(?:per[- ]?tx|transaction)\s+limit\s+(\d+(?:\.\d+)?)/i;
+const swapRegex = /(?:swap|convert)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to|for)\s+(cusd|celo)/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
 
 function normalizeToken(token: string): "cUSD" | "CELO" {
@@ -64,6 +66,11 @@ export function parseIntent(text: string): Intent {
   const dv = c.match(deleteRecipientRegex);
   if (dv) {
     return { kind: "delete_recipient", name: dv[1].trim() };
+  }
+
+  const sw = c.match(swapRegex);
+  if (sw) {
+    return { kind: "swap", amount: sw[1], fromToken: normalizeToken(sw[2]), toToken: normalizeToken(sw[3]) };
   }
 
   const s = c.match(sendRegex);

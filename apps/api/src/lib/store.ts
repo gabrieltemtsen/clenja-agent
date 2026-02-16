@@ -7,7 +7,7 @@ type PolicyState = Record<string, number>;
 type Receipt = {
   id: string;
   userId: string;
-  kind: "send" | "cashout";
+  kind: "send" | "cashout" | "swap";
   amount: string;
   token: string;
   ref: string;

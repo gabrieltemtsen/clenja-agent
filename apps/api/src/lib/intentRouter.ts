@@ -31,7 +31,7 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
           {
             role: "system",
             content:
-              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, to, beneficiaryName, recipientName, name, address, assistantReply. Allowed kind: help,balance,history,status,address,greeting,confirm_yes,show_limits,set_daily_limit,set_per_tx_limit,pause_sending,resume_sending,sendability_check,list_recipients,save_recipient,update_recipient,delete_recipient,send,send_to_recipient,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
+              "Extract user intent for a crypto assistant. Return strict JSON with keys: kind, amount, token, fromToken, toToken, to, beneficiaryName, recipientName, name, address, assistantReply. Allowed kind: help,balance,history,status,address,greeting,confirm_yes,show_limits,set_daily_limit,set_per_tx_limit,pause_sending,resume_sending,swap,sendability_check,list_recipients,save_recipient,update_recipient,delete_recipient,send,send_to_recipient,cashout,unknown. For token use CELO or cUSD. For unknown, provide short helpful assistantReply.",
           },
           { role: "user", content: text },
         ],
@@ -128,6 +128,11 @@ export async function routeIntent(text: string): Promise<IntentRoute> {
     if (k === "set_per_tx_limit") {
       if (!parsed.amount) return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "Tell me the per-transaction limit amount, e.g. set per-tx limit 20." };
       return { intent: { kind: "set_per_tx_limit", amount: String(parsed.amount) }, source: "llm" };
+    }
+
+    if (k === "swap") {
+      if (!parsed.amount || !parsed.fromToken || !parsed.toToken) return { intent: { kind: "unknown", raw: text }, source: "llm", assistantReply: "Try: swap 10 CELO to cUSD." };
+      return { intent: { kind: "swap", amount: String(parsed.amount), fromToken: parsed.fromToken, toToken: parsed.toToken }, source: "llm" };
     }
 
     if (["help", "balance", "history", "status", "address", "greeting", "confirm_yes", "show_limits", "pause_sending", "resume_sending", "sendability_check", "list_recipients"].includes(k)) {
