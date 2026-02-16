@@ -65,3 +65,28 @@ flyctl secrets set \
 - Offramp also supports `OFFRAMP_MODE=mock|live` with `OFFRAMP_API_BASE`, `OFFRAMP_API_KEY`, `OFFRAMP_EP_*`, timeout, and fallback.
 - Check readiness with `GET /v1/readiness`.
 - State is persisted in `STATE_DB_PATH` (default `./.data/state.json`).
+
+## 6) GOAT Regression (Telegram, ~2 minutes)
+
+Prereq:
+- API env: `EXECUTION_ENGINE=goat`
+- Bot + API redeployed
+
+Run in Telegram:
+1. `what's my address`
+2. `my balance`
+3. `send 0.01 CELO to <your-second-wallet>`
+4. reply with confirmation code
+5. verify tx link is returned
+6. `swap 0.1 CELO to cUSD`
+7. reply with confirmation code
+8. verify tx link is returned
+9. `set daily limit 1`
+10. `pause sending`
+11. try `send 0.01 CELO to <addr>` → should be blocked
+12. `resume sending`
+13. `show limits`
+
+Rollback:
+- set `EXECUTION_ENGINE=legacy`
+- redeploy API
