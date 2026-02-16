@@ -72,15 +72,19 @@ async function sendMessage(chatId, text, replyToMessageId, withKeyboard = false)
 
 function normalizeUiCommand(text) {
   const t = text.trim().toLowerCase();
-  if (t.includes("balance")) return "what's my balance";
-  if (t.includes("address")) return "what's my address";
-  if (t.includes("history")) return "history";
-  if (t.includes("recipients")) return "list recipients";
-  if (t.includes("cashout")) return "cashout 50 cUSD";
-  if (t.includes("help")) return "/help";
-  if (t.includes("send")) return "send 1 CELO to 0x...";
-  if (t.includes("swap") || t.includes("convert")) return "swap 1 CELO to cUSD";
-  if (t.includes("limits")) return "show limits";
+  const plain = t.replace(/[^\p{L}\p{N}\s]/gu, "").trim();
+
+  // Only normalize exact quick-action button taps. Never rewrite free-form user text.
+  if (plain === "balance") return "what's my balance";
+  if (plain === "address") return "what's my address";
+  if (plain === "history") return "history";
+  if (plain === "recipients") return "list recipients";
+  if (plain === "cashout") return "cashout 50 cUSD";
+  if (plain === "help") return "/help";
+  if (plain === "send") return "send 1 CELO to 0x...";
+  if (plain === "swap") return "swap 1 CELO to cUSD";
+  if (plain === "limits") return "show limits";
+
   return text;
 }
 
