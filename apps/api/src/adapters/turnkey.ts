@@ -306,10 +306,10 @@ export class TurnkeyWalletProvider implements WalletProvider {
     const amountInWei = ethers.utils.parseUnits(input.amountIn, 18);
     const minOutWei = ethers.utils.parseUnits(input.minAmountOut, 18);
 
-    if (input.fromToken !== "CELO") {
-      const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
-      await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
-    }
+    // Mento broker pulls input token via transferFrom during swapIn.
+    // CELO on Celo behaves as ERC-20 here as well, so allowance is required.
+    const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
+    await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
 
     const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
     const txHash = await sendTurnkeyTx(input.userId, address, walletId, swapTxObj);
