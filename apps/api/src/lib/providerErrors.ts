@@ -23,6 +23,9 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
   if (msg.includes("offramp_beneficiary_missing_for_clova")) {
     return `${label} beneficiary details are incomplete. Configure default NG beneficiary or provide full bank details.`;
   }
+  if (msg.includes("offramp_quote_not_found_or_expired")) {
+    return `${label} quote expired. Please request a fresh cashout quote and confirm again.`;
+  }
   if (msg.includes("rpc_-32602")) {
     return `${label} rejected the transaction format. Please retry; if it persists, check wallet signing config.`;
   }

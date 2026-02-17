@@ -12,6 +12,7 @@ export type CashoutQuoteResponse = {
   fee: string;
   receiveAmount: string;
   eta: string;
+  expiresAt?: number;
 };
 
 export type CreatePayoutRequest = {

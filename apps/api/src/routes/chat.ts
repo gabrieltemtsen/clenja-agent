@@ -8,6 +8,7 @@ import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 import { toUserFacingProviderError } from "../lib/providerErrors.js";
+import { offrampConfig } from "../lib/config.js";
 
 export const chatRouter = Router();
 const wallet = makeWalletProvider();
@@ -42,7 +43,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD' (NGN cashout is cUSD-first)."
+      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', 'cashout 50 cUSD' (NGN cashout is cUSD-first), or 'cashout status ord_...'."
     });
   }
 
@@ -176,6 +177,15 @@ chatRouter.post("/message", async (req, res) => {
     return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
   }
 
+  if (intent.kind === "cashout_status") {
+    try {
+      const s = await offramp.status(intent.orderId);
+      return res.json({ reply: `Cashout ${intent.orderId}: ${s.status}${s.updatedAt ? ` (updated ${new Date(s.updatedAt).toISOString()})` : ""}.`, data: s });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+    }
+  }
+
   if (intent.kind === "swap") {
     if (intent.fromToken === intent.toToken) return res.json({ reply: "From and to token are the same. Try CELO -> cUSD or cUSD -> CELO." });
 
@@ -250,12 +260,12 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: `❌ Blocked by policy: ${pc.reason}` });
     }
 
-    let beneficiary: { country: string; bankName: string; accountName: string; accountNumber: string } | undefined;
+    let beneficiary: { country: string; bankName: string; accountName: string; accountNumber: string; bankCode?: string } | undefined;
     if (intent.beneficiaryName) {
       const matches = store.listBeneficiaries(userId).filter((b) => fuzzyIncludes(b.accountName, intent.beneficiaryName!));
       if (matches.length === 1) {
         const found = matches[0];
-        beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked };
+        beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked, bankCode: offrampConfig.defaultBeneficiary.bankCode };
       } else if (matches.length > 1) {
         return res.json({ reply: `I found multiple beneficiaries for '${intent.beneficiaryName}': ${matches.map((m) => m.accountName).join(", ")}. Please be more specific.` });
       } else {
@@ -263,11 +273,19 @@ chatRouter.post("/message", async (req, res) => {
       }
     }
 
+    if (!beneficiary && offrampConfig.mode === "live" && offrampConfig.provider === "clova") {
+      const d = offrampConfig.defaultBeneficiary;
+      if (!d.accountName || !d.accountNumber || !d.bankCode) {
+        return res.json({ reply: "Cashout setup incomplete: set default NG beneficiary (account name, account number, bank code) in API env before running live Clova cashout." });
+      }
+    }
+
     try {
       const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: beneficiary?.country as any || "NG", currency: "NGN" });
       const otp = "123456";
       const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
-      return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN. Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+      const expiry = quote.expiresAt ? ` Expires: ${new Date(quote.expiresAt).toISOString()}.` : "";
+      return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN.${expiry} Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
     }
@@ -319,14 +337,21 @@ chatRouter.post("/confirm", async (req, res) => {
 
   if (ctx.kind === "cashout") {
     try {
-      const beneficiary = ctx.beneficiary || { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" };
+      const beneficiary = ctx.beneficiary || {
+        country: offrampConfig.defaultBeneficiary.country,
+        bankName: offrampConfig.defaultBeneficiary.bankName || "Default Bank",
+        accountName: offrampConfig.defaultBeneficiary.accountName || "Default Recipient",
+        accountNumber: offrampConfig.defaultBeneficiary.accountNumber,
+        bankCode: offrampConfig.defaultBeneficiary.bankCode,
+      };
       const order = await offramp.create({ userId, quoteId: ctx.quoteId, fromToken: ctx.token, amount: String(ctx.amount), beneficiary, otp: answer });
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
-      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId, status: order.status } });
       const depositLine = order.depositAddress ? `\nDeposit: ${order.depositAddress}` : "";
-      const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} ${order.currency || "NGN"}` : "";
-      return res.json({ reply: `✅ Cashout created. Order: ${order.payoutId} (${order.status})${receiveLine}${depositLine}`, payoutId: order.payoutId, depositAddress: order.depositAddress });
+      const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} NGN` : "";
+      const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
+      return res.json({ reply: `✅ Cashout created. Order: ${order.payoutId} (${order.status})${receiveLine}${depositLine}${trackLine}`, payoutId: order.payoutId, depositAddress: order.depositAddress });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });

@@ -20,6 +20,7 @@ export type Intent =
   | { kind: "send"; amount: string; token: "cUSD" | "CELO"; to: string }
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
+  | { kind: "cashout_status"; orderId: string }
   | { kind: "unknown"; raw: string };
 
 const sendRegex = /(send|transfer)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to\s+)?(?:this\s+address\s*:?\s*)?(0x[a-fA-F0-9]{40})/i;
@@ -31,6 +32,7 @@ const setDailyLimitRegex = /set\s+daily\s+limit\s+(\d+(?:\.\d+)?)/i;
 const setPerTxLimitRegex = /set\s+(?:per[- ]?tx|transaction)\s+limit\s+(\d+(?:\.\d+)?)/i;
 const swapRegex = /(?:swap|convert)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to|for)\s+(cusd|celo)/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
+const cashoutStatusRegex = /cashout\s+status\s+([a-zA-Z0-9_-]+)/i;
 
 function normalizeToken(token: string): "cUSD" | "CELO" {
   return token.toLowerCase() === "cusd" ? "cUSD" : "CELO";
@@ -42,6 +44,10 @@ export function parseIntent(text: string): Intent {
   if (/help|what can you do|commands/i.test(c)) return { kind: "help" };
   if (/balance|what'?s my balance|my balance/i.test(c)) return { kind: "balance" };
   if (/history|my transactions|receipts/i.test(c)) return { kind: "history" };
+  const cos = c.match(cashoutStatusRegex);
+  if (cos) {
+    return { kind: "cashout_status", orderId: cos[1] };
+  }
   if (/status|system status|readiness/i.test(c)) return { kind: "status" };
   if (/^(hi|hello|hey)\b/i.test(c) || /how are you/i.test(c)) return { kind: "greeting" };
   if (/^(yes|confirm|ok)$/i.test(c)) return { kind: "confirm_yes" };
