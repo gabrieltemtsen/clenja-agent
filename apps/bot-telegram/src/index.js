@@ -7,6 +7,8 @@ const MODE = (process.env.TELEGRAM_MODE || "polling").toLowerCase();
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL;
 const DATABASE_URL = process.env.DATABASE_URL;
 const pendingChallenges = new Map(); // fallback in-memory: userId -> challengeId
+const tradeUiState = new Map(); // fallback in-memory: userId -> { amount: string, slippage: number }
+const pendingUiInput = new Map(); // fallback in-memory: userId -> "amount" | "slippage"
 
 const db = DATABASE_URL ? new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } }) : null;
 
@@ -21,6 +23,20 @@ const COMMAND_KEYBOARD = {
   resize_keyboard: true,
   is_persistent: true,
 };
+
+function tradeKeyboardFor(userId) {
+  const s = tradeUiState.get(userId) || { amount: "1", slippage: 1 };
+  return {
+    inline_keyboard: [
+      [{ text: "← Back", callback_data: "trade_back" }, { text: "↻ Refresh", callback_data: "trade_refresh" }],
+      [{ text: "✅ Swap", callback_data: "trade_mode_swap" }, { text: "Limit", callback_data: "trade_mode_limit" }, { text: "DCA", callback_data: "trade_mode_dca" }],
+      [{ text: `${s.amount === "0.5" ? "✅ " : ""}0.5 CELO`, callback_data: "trade_amt_0.5" }, { text: `${s.amount === "1" ? "✅ " : ""}1 CELO`, callback_data: "trade_amt_1" }, { text: `${s.amount === "3" ? "✅ " : ""}3 CELO`, callback_data: "trade_amt_3" }],
+      [{ text: `${s.amount === "5" ? "✅ " : ""}5 CELO`, callback_data: "trade_amt_5" }, { text: `${s.amount === "10" ? "✅ " : ""}10 CELO`, callback_data: "trade_amt_10" }, { text: "X CELO ✏️", callback_data: "trade_amt_custom" }],
+      [{ text: `${s.slippage === 1 ? "✅ " : ""}1% Slippage`, callback_data: "trade_slip_1" }, { text: `${s.slippage === 3 ? "✅ " : ""}3% Slippage`, callback_data: "trade_slip_3" }, { text: "X Slip ✏️", callback_data: "trade_slip_custom" }],
+      [{ text: `🔄 Swap ${s.amount} CELO → cUSD`, callback_data: "trade_execute" }],
+    ],
+  };
+}
 
 if (!BOT_TOKEN) {
   console.error("[clenja-bot] TELEGRAM_BOT_TOKEN missing");
@@ -82,7 +98,7 @@ function normalizeUiCommand(text) {
   if (plain === "cashout") return "cashout 50 cUSD";
   if (plain === "help") return "/help";
   if (plain === "send") return "send 1 CELO to 0x...";
-  if (plain === "swap") return "swap 1 CELO to cUSD";
+  if (plain === "swap") return "/trade";
   if (plain === "limits") return "show limits";
 
   return text;
@@ -128,6 +144,70 @@ async function clearPendingChallenge(userId) {
 }
 
 async function handleUpdate(update) {
+  const cq = update.callback_query;
+  if (cq) {
+    const userId = `tg:${cq.from?.id ?? "unknown"}`;
+    const data = String(cq.data || "");
+    const chatId = cq.message?.chat?.id;
+    const messageId = cq.message?.message_id;
+    const current = tradeUiState.get(userId) || { amount: "1", slippage: 1 };
+
+    if (data.startsWith("trade_")) {
+      await tg("answerCallbackQuery", { callback_query_id: cq.id });
+
+      if (data === "trade_back") {
+        if (chatId && messageId) await tg("editMessageText", { chat_id: chatId, message_id: messageId, text: "Back to chat commands. Say what you want naturally, or tap buttons below." });
+        return;
+      }
+      if (data === "trade_refresh") {
+        if (chatId && messageId) await tg("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: tradeKeyboardFor(userId) });
+        return;
+      }
+      if (data === "trade_mode_limit" || data === "trade_mode_dca") {
+        if (chatId && messageId) await tg("editMessageText", { chat_id: chatId, message_id: messageId, text: "Limit/DCA mode coming next. Swap mode is live now.", reply_markup: tradeKeyboardFor(userId) });
+        return;
+      }
+      if (data.startsWith("trade_amt_")) {
+        const v = data.replace("trade_amt_", "");
+        if (v === "custom") {
+          pendingUiInput.set(userId, "amount");
+          if (chatId) await sendMessage(chatId, "Send custom swap amount in CELO (e.g. 2.5).", messageId, true);
+          return;
+        }
+        current.amount = v;
+        tradeUiState.set(userId, current);
+        if (chatId && messageId) await tg("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: tradeKeyboardFor(userId) });
+        return;
+      }
+      if (data.startsWith("trade_slip_")) {
+        const v = data.replace("trade_slip_", "");
+        if (v === "custom") {
+          pendingUiInput.set(userId, "slippage");
+          if (chatId) await sendMessage(chatId, "Send custom slippage percent (e.g. 2).", messageId, true);
+          return;
+        }
+        current.slippage = Number(v);
+        tradeUiState.set(userId, current);
+        if (chatId && messageId) await tg("editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: tradeKeyboardFor(userId) });
+        return;
+      }
+      if (data === "trade_execute") {
+        if (!chatId) return;
+        try {
+          const command = `swap ${current.amount} CELO to cUSD`;
+          const { status, data: apiData } = await apiCall("/v1/chat/message", { userId, text: command }, idemKey(userId, command));
+          const reply = apiData.reply || (status >= 400 ? "Request failed." : "Done.");
+          const extra = apiData.challengeId ? `\n\nReply with just the confirmation code (e.g. 17B5).` : "";
+          if (apiData.challengeId) await setPendingChallenge(userId, apiData.challengeId);
+          await sendMessage(chatId, `${reply}${extra}`, messageId, true);
+        } catch {
+          await sendMessage(chatId, "Service error. Please try again in a moment.", messageId, true);
+        }
+        return;
+      }
+    }
+  }
+
   const msg = update.message;
   if (!msg?.text) return;
 
@@ -159,10 +239,50 @@ async function handleUpdate(update) {
   if (rawText === "/help" || text === "/help") {
     await sendMessage(
       msg.chat.id,
-      "Available:\n• balance\n• address\n• history\n• recipients (save/list/update/delete)\n• send <amount> <cUSD|CELO> to <address|name>\n• swap <amount> <CELO|cUSD> to <CELO|cUSD>\n• cashout <amount> <cUSD|CELO>\n• reply with confirmation code when prompted",
+      "Available:\n• balance\n• address\n• history\n• recipients (save/list/update/delete)\n• send <amount> <cUSD|CELO> to <address|name>\n• swap <amount> <CELO|cUSD> to <CELO|cUSD>\n• /trade (inline swap keyboard)\n• cashout <amount> <cUSD|CELO>\n• reply with confirmation code when prompted",
       msg.message_id,
       true,
     );
+    return;
+  }
+
+  if (rawText === "/trade" || text === "/trade") {
+    if (!tradeUiState.has(userId)) tradeUiState.set(userId, { amount: "1", slippage: 1 });
+    await tg("sendMessage", {
+      chat_id: msg.chat.id,
+      text: "Swap panel (conversational mode still works too).",
+      reply_parameters: { message_id: msg.message_id },
+      reply_markup: tradeKeyboardFor(userId),
+    });
+    return;
+  }
+
+  const pendingInput = pendingUiInput.get(userId);
+  if (pendingInput === "amount") {
+    const amount = Number(rawText);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await sendMessage(msg.chat.id, "Invalid amount. Send a number like 2.5", msg.message_id, true);
+      return;
+    }
+    const s = tradeUiState.get(userId) || { amount: "1", slippage: 1 };
+    s.amount = String(amount);
+    tradeUiState.set(userId, s);
+    pendingUiInput.delete(userId);
+    await sendMessage(msg.chat.id, `Set swap amount to ${s.amount} CELO. Use /trade to execute.`, msg.message_id, true);
+    return;
+  }
+
+  if (pendingInput === "slippage") {
+    const slippage = Number(rawText);
+    if (!Number.isFinite(slippage) || slippage <= 0 || slippage > 50) {
+      await sendMessage(msg.chat.id, "Invalid slippage. Send a percent like 2", msg.message_id, true);
+      return;
+    }
+    const s = tradeUiState.get(userId) || { amount: "1", slippage: 1 };
+    s.slippage = slippage;
+    tradeUiState.set(userId, s);
+    pendingUiInput.delete(userId);
+    await sendMessage(msg.chat.id, `Set slippage to ${s.slippage}%. Use /trade to execute.`, msg.message_id, true);
     return;
   }
 
@@ -231,6 +351,7 @@ async function setBotCommands() {
     commands: [
       { command: "start", description: "Start and create wallet" },
       { command: "help", description: "Show available actions" },
+      { command: "trade", description: "Open swap control keyboard" },
     ],
   });
 }
