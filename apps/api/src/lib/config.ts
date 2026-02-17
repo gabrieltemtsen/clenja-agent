@@ -22,15 +22,27 @@ export const paraConfig = {
 
 export const offrampConfig = {
   mode: (process.env.OFFRAMP_MODE || "mock").toLowerCase(),
+  provider: (process.env.OFFRAMP_PROVIDER || "legacy").toLowerCase() as "legacy" | "clova",
   apiBase: process.env.OFFRAMP_API_BASE || "",
   apiKey: process.env.OFFRAMP_API_KEY || "",
+  authMode: (process.env.OFFRAMP_AUTH_MODE || "auto").toLowerCase() as "auto" | "api_key" | "x402",
+  // Raw x402 payment header for backend-to-backend calls when api key is not used.
+  // Expected format depends on upstream x402 provider (e.g. thirdweb settlePayment payload).
+  x402PaymentHeader: process.env.OFFRAMP_X402_PAYMENT_HEADER || "",
   timeoutMs: Number(process.env.OFFRAMP_TIMEOUT_MS || 15000),
   fallbackToMockOnError: (process.env.OFFRAMP_FALLBACK_TO_MOCK_ON_ERROR || "true").toLowerCase() === "true",
   endpoints: {
     quote: process.env.OFFRAMP_EP_QUOTE || "/offramp/quote",
     create: process.env.OFFRAMP_EP_CREATE || "/offramp/create",
     status: process.env.OFFRAMP_EP_STATUS || "/offramp/status",
-  }
+  },
+  defaultBeneficiary: {
+    country: process.env.CASHOUT_DEFAULT_COUNTRY || "NG",
+    bankName: process.env.CASHOUT_DEFAULT_BANK_NAME || "",
+    accountName: process.env.CASHOUT_DEFAULT_ACCOUNT_NAME || "",
+    accountNumber: process.env.CASHOUT_DEFAULT_ACCOUNT_NUMBER || "",
+    bankCode: process.env.CASHOUT_DEFAULT_BANK_CODE || "",
+  },
 };
 
 export const safetyConfig = {

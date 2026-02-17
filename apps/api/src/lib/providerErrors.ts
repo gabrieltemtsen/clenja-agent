@@ -11,6 +11,18 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
   if (msg.includes("http_401") || msg.includes("http_403")) {
     return `${label} credentials were rejected.`;
   }
+  if (msg.includes("offramp_payment_required_402")) {
+    return `${label} requires payment authorization (x402 or API key) before this request can run.`;
+  }
+  if (msg.includes("offramp_auth_not_configured")) {
+    return `${label} auth is not configured. Set API key or x402 payment header.`;
+  }
+  if (msg.includes("cashout_token_not_supported_live:CELO")) {
+    return `${label} currently supports cUSD cashout for NGN. Please swap CELO to cUSD first.`;
+  }
+  if (msg.includes("offramp_beneficiary_missing_for_clova")) {
+    return `${label} beneficiary details are incomplete. Configure default NG beneficiary or provide full bank details.`;
+  }
   if (msg.includes("rpc_-32602")) {
     return `${label} rejected the transaction format. Please retry; if it persists, check wallet signing config.`;
   }

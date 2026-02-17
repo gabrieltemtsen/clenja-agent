@@ -42,7 +42,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD'."
+      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', or 'cashout 50 cUSD' (NGN cashout is cUSD-first)."
     });
   }
 
@@ -240,6 +240,10 @@ chatRouter.post("/message", async (req, res) => {
   }
 
   if (intent.kind === "cashout") {
+    if (intent.token === "CELO") {
+      return res.json({ reply: "For live NGN cashout, CELO must be swapped to cUSD first. Try: swap <amount> CELO to cUSD, then cashout <amount> cUSD." });
+    }
+
     const pc = checkPolicy({ userId, action: "cashout", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD" });
     if (!pc.ok) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.blocked", status: "error", detail: { reason: pc.reason } });
@@ -316,11 +320,13 @@ chatRouter.post("/confirm", async (req, res) => {
   if (ctx.kind === "cashout") {
     try {
       const beneficiary = ctx.beneficiary || { country: "NG", bankName: "Mock Bank", accountName: "Demo User", accountNumber: "0000000000" };
-      const order = await offramp.create({ userId, quoteId: ctx.quoteId, beneficiary, otp: answer });
+      const order = await offramp.create({ userId, quoteId: ctx.quoteId, fromToken: ctx.token, amount: String(ctx.amount), beneficiary, otp: answer });
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId } });
-      return res.json({ reply: `✅ Cashout created. Payout: ${order.payoutId} (${order.status})`, payoutId: order.payoutId });
+      const depositLine = order.depositAddress ? `\nDeposit: ${order.depositAddress}` : "";
+      const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} ${order.currency || "NGN"}` : "";
+      return res.json({ reply: `✅ Cashout created. Order: ${order.payoutId} (${order.status})${receiveLine}${depositLine}`, payoutId: order.payoutId, depositAddress: order.depositAddress });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
