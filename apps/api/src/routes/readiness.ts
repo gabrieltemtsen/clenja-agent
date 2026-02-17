@@ -9,7 +9,7 @@ export const readinessRouter = Router();
 readinessRouter.get("/readiness", (_req, res) => {
   const paraLiveConfigured = paraConfig.mode === "live" && Boolean(paraConfig.apiKey);
   const turnkeyLiveConfigured = Boolean(turnkeyConfig.organizationId && turnkeyConfig.apiPublicKey && turnkeyConfig.apiPrivateKey);
-  const offrampLiveConfigured = offrampConfig.mode === "live" && Boolean(offrampConfig.apiBase && offrampConfig.apiKey);
+  const offrampLiveConfigured = offrampConfig.mode === "live" && Boolean(offrampConfig.apiBase && (offrampConfig.apiKey || offrampConfig.x402PaymentHeader));
   const ready = {
     x402: Boolean(process.env.THIRDWEB_SECRET_KEY && process.env.X402_SERVER_WALLET),
     walletProvider: walletConfig.provider,
@@ -41,10 +41,19 @@ readinessRouter.get("/readiness", (_req, res) => {
     },
     offramp: {
       mode: offrampConfig.mode,
+      provider: offrampConfig.provider,
+      authMode: offrampConfig.authMode,
       apiBase: offrampConfig.apiBase ? "configured" : "missing",
+      apiKey: offrampConfig.apiKey ? "configured" : "missing",
+      x402PaymentHeader: offrampConfig.x402PaymentHeader ? "configured" : "missing",
       timeoutMs: offrampConfig.timeoutMs,
       fallbackToMockOnError: offrampConfig.fallbackToMockOnError,
       endpoints: offrampConfig.endpoints,
+      defaultBeneficiary: {
+        accountName: offrampConfig.defaultBeneficiary.accountName ? "configured" : "missing",
+        accountNumber: offrampConfig.defaultBeneficiary.accountNumber ? "configured" : "missing",
+        bankCode: offrampConfig.defaultBeneficiary.bankCode ? "configured" : "missing",
+      },
       liveStatus: getOfframpLiveStatus(),
     },
     safety: safetyConfig,

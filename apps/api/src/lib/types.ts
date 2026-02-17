@@ -17,11 +17,14 @@ export type CashoutQuoteResponse = {
 export type CreatePayoutRequest = {
   userId: string;
   quoteId: string;
+  fromToken?: "cUSD" | "CELO";
+  amount?: string;
   beneficiary: {
     country: string;
     bankName: string;
     accountName: string;
     accountNumber: string;
+    bankCode?: string;
   };
   otp: string;
 };
