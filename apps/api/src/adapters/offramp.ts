@@ -4,86 +4,93 @@ import { offrampConfig, safetyConfig } from "../lib/config.js";
 
 export interface OfframpProvider {
   quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse>;
-  create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled"; depositAddress?: string; receiveAmount?: string; currency?: string }>;
+  create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled"; depositAddress?: string; receiveAmount?: string }>;
+  status(payoutId: string): Promise<{ payoutId: string; status: string; updatedAt?: number }>;
 }
 
-type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; auth: "api_key" | "x402" | "none"; lastError?: string; lastCheckedAt?: number };
-let liveStatus: OfframpLiveStatus = {
-  mode: offrampConfig.mode === "live" ? "live" : "mock",
-  healthy: offrampConfig.mode !== "live",
-  auth: "none",
-};
+type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
+let liveStatus: OfframpLiveStatus = { mode: offrampConfig.mode === "live" ? "live" : "mock", healthy: offrampConfig.mode !== "live" };
 
-function setLiveStatus(ok: boolean, auth: OfframpLiveStatus["auth"], err?: string) {
-  liveStatus = { mode: offrampConfig.mode === "live" ? "live" : "mock", healthy: ok, auth, lastError: err, lastCheckedAt: Date.now() };
+function setLiveStatus(ok: boolean, err?: string) {
+  liveStatus = { mode: offrampConfig.mode === "live" ? "live" : "mock", healthy: ok, lastError: err, lastCheckedAt: Date.now() };
 }
 
 export function getOfframpLiveStatus() {
   return liveStatus;
 }
 
-function chosenAuthMode(): "api_key" | "x402" | "none" {
+function assertLiveConfig() {
+  if (offrampConfig.mode !== "live") return;
+  if (!offrampConfig.apiBase && safetyConfig.strictLiveMode) throw new Error("offramp_live_strict_config_missing");
+}
+
+function authHeaders(): Record<string, string> {
+  const mode = offrampConfig.authMode;
   const hasApiKey = Boolean(offrampConfig.apiKey);
   const hasX402 = Boolean(offrampConfig.x402PaymentHeader);
-  if (offrampConfig.authMode === "api_key") return hasApiKey ? "api_key" : "none";
-  if (offrampConfig.authMode === "x402") return hasX402 ? "x402" : "none";
-  if (hasApiKey) return "api_key";
-  if (hasX402) return "x402";
-  return "none";
-}
 
-function assertLiveConfig() {
-  const auth = chosenAuthMode();
-  if (offrampConfig.mode === "live" && (!offrampConfig.apiBase || auth === "none") && safetyConfig.strictLiveMode) {
-    throw new Error("offramp_live_strict_config_missing");
+  if (mode === "api_key") {
+    if (!hasApiKey) throw new Error("offramp_auth_not_configured");
+    return { "x-api-key": offrampConfig.apiKey };
   }
+
+  if (mode === "x402") {
+    if (!hasX402) throw new Error("offramp_auth_not_configured");
+    return { "x-payment": offrampConfig.x402PaymentHeader };
+  }
+
+  // auto
+  if (hasApiKey) return { "x-api-key": offrampConfig.apiKey };
+  if (hasX402) return { "x-payment": offrampConfig.x402PaymentHeader };
+  throw new Error("offramp_auth_not_configured");
 }
 
-function tokenToClovaAsset(fromToken: "cUSD" | "CELO") {
-  if (fromToken === "cUSD") return "cUSD_CELO" as const;
-  // Clova currently offramps stablecoins; CELO should be swapped first.
-  throw new Error("cashout_token_not_supported_live:CELO");
-}
-
-async function offrampRequest(path: string, body: unknown) {
-  const auth = chosenAuthMode();
+async function offrampRequest(path: string, method: "POST" | "GET", body?: unknown) {
   if (!offrampConfig.apiBase) throw new Error("offramp_not_configured");
-  if (auth === "none") throw new Error("offramp_auth_not_configured");
-
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (auth === "api_key") {
-    headers["x-api-key"] = offrampConfig.apiKey;
-    headers["authorization"] = `Bearer ${offrampConfig.apiKey}`;
-  } else if (auth === "x402") {
-    headers["x-payment"] = offrampConfig.x402PaymentHeader;
-  }
-
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), offrampConfig.timeoutMs);
 
   try {
     const r = await fetch(`${offrampConfig.apiBase}${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
+      method,
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders(),
+      },
+      body: method === "POST" ? JSON.stringify(body || {}) : undefined,
       signal: ctrl.signal,
     });
 
-    const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       if (r.status === 402) throw new Error("offramp_payment_required_402");
       throw new Error(`offramp_http_${r.status}`);
     }
-
-    setLiveStatus(true, auth);
+    const data = await r.json();
+    setLiveStatus(true);
     return data;
   } catch (e: any) {
     const msg = e?.name === "AbortError" ? "offramp_timeout" : String(e?.message || e);
-    setLiveStatus(false, auth, msg);
+    setLiveStatus(false, msg);
     throw new Error(msg);
   } finally {
     clearTimeout(timer);
   }
+}
+
+const clovaQuoteCache = new Map<string, { amountCrypto: string; asset: "cUSD_CELO" | "USDC_BASE" | "USDCX_STACKS"; createdAt: number }>();
+
+function mapTokenToAsset(token: "cUSD" | "CELO") {
+  if (token === "cUSD") return "cUSD_CELO" as const;
+  // Keep explicit UX: CELO direct cashout not supported yet in clova path.
+  throw new Error("cashout_token_not_supported_live:CELO");
+}
+
+function mapOrderStatus(status: string): "pending" | "processing" | "settled" {
+  if (status === "paid_out") return "processing";
+  if (status === "confirming") return "processing";
+  if (status === "awaiting_deposit") return "pending";
+  if (status === "failed") return "pending";
+  return "processing";
 }
 
 export class MockOfframpProvider implements OfframpProvider {
@@ -109,6 +116,10 @@ export class MockOfframpProvider implements OfframpProvider {
       status: "pending" as const
     };
   }
+
+  async status(payoutId: string) {
+    return { payoutId, status: "pending", updatedAt: Date.now() };
+  }
 }
 
 export class LiveOfframpProvider implements OfframpProvider {
@@ -118,25 +129,33 @@ export class LiveOfframpProvider implements OfframpProvider {
     assertLiveConfig();
     if (offrampConfig.mode !== "live") return this.fallback.quote(input);
 
+    if (offrampConfig.provider === "clova") {
+      const asset = mapTokenToAsset(input.fromToken);
+      const data = await offrampRequest("/v1/quotes", "POST", {
+        asset,
+        amountCrypto: input.amount,
+        destinationCurrency: "NGN",
+      });
+
+      const quoteId = String(data.quoteId || `cq_${randomUUID()}`);
+      clovaQuoteCache.set(quoteId, {
+        amountCrypto: input.amount,
+        asset,
+        createdAt: Date.now(),
+      });
+
+      return {
+        quoteId,
+        rate: String(data.rate || "0"),
+        fee: String(data.feeNgn || data.fee || "0"),
+        receiveAmount: String(data.receiveNgn || data.receiveAmount || "0"),
+        eta: "Paystack payout after deposit confirmation",
+        expiresAt: Number(data.expiresAt || Date.now() + 5 * 60 * 1000),
+      };
+    }
+
     try {
-      if (offrampConfig.provider === "clova") {
-        const asset = tokenToClovaAsset(input.fromToken);
-        const data = await offrampRequest("/v1/quotes", {
-          asset,
-          amountCrypto: input.amount,
-          destinationCurrency: input.currency,
-        });
-
-        return {
-          quoteId: String(data.quoteId || `oq_${randomUUID()}`),
-          rate: String(data.rate || "0"),
-          fee: String(data.feeNgn || data.fee || "0"),
-          receiveAmount: String(data.receiveNgn || data.receiveAmount || "0"),
-          eta: "3-15 min",
-        };
-      }
-
-      const data = await offrampRequest(offrampConfig.endpoints.quote, input);
+      const data = await offrampRequest(offrampConfig.endpoints.quote, "POST", input);
       return {
         quoteId: String(data.quoteId || `oq_${randomUUID()}`),
         rate: String(data.rate || "0"),
@@ -154,38 +173,37 @@ export class LiveOfframpProvider implements OfframpProvider {
     assertLiveConfig();
     if (offrampConfig.mode !== "live") return this.fallback.create(input);
 
-    try {
-      if (offrampConfig.provider === "clova") {
-        const asset = tokenToClovaAsset(input.fromToken || "cUSD");
-        const fallback = offrampConfig.defaultBeneficiary;
-        const accountName = input.beneficiary.accountName || fallback.accountName;
-        const accountNumber = input.beneficiary.accountNumber || fallback.accountNumber;
-        const bankCode = (input as any).beneficiary.bankCode || fallback.bankCode;
+    if (offrampConfig.provider === "clova") {
+      const cached = clovaQuoteCache.get(input.quoteId);
+      if (!cached) throw new Error("offramp_quote_not_found_or_expired");
 
-        if (!accountName || !accountNumber || !bankCode) {
-          throw new Error("offramp_beneficiary_missing_for_clova");
-        }
-
-        const data = await offrampRequest("/v1/orders", {
-          asset,
-          amountCrypto: input.amount,
-          recipient: {
-            accountName,
-            accountNumber,
-            bankCode,
-          },
-        });
-
-        return {
-          payoutId: String(data.orderId || `ord_${randomUUID()}`),
-          status: "processing" as const,
-          depositAddress: String(data.depositAddress || ""),
-          receiveAmount: String(data.receiveNgn || ""),
-          currency: "NGN",
-        };
+      const beneficiary = input.beneficiary;
+      const bankCode = (beneficiary as any)?.bankCode || offrampConfig.defaultBeneficiary.bankCode;
+      if (!beneficiary?.accountName || !beneficiary?.accountNumber || !bankCode) {
+        throw new Error("offramp_beneficiary_missing_for_clova");
       }
 
-      const data = await offrampRequest(offrampConfig.endpoints.create, input);
+      const data = await offrampRequest("/v1/orders", "POST", {
+        asset: cached.asset,
+        amountCrypto: cached.amountCrypto,
+        recipient: {
+          accountName: beneficiary.accountName,
+          accountNumber: beneficiary.accountNumber,
+          bankCode,
+        },
+      });
+
+      clovaQuoteCache.delete(input.quoteId);
+      return {
+        payoutId: String(data.orderId || `ord_${randomUUID()}`),
+        status: mapOrderStatus(String(data.status || "awaiting_deposit")),
+        depositAddress: String(data.depositAddress || ""),
+        receiveAmount: String(data.receiveNgn || ""),
+      };
+    }
+
+    try {
+      const data = await offrampRequest(offrampConfig.endpoints.create, "POST", input);
       return {
         payoutId: String(data.payoutId || `po_${randomUUID()}`),
         status: (data.status || "pending") as "pending" | "processing" | "settled",
@@ -194,5 +212,26 @@ export class LiveOfframpProvider implements OfframpProvider {
       if (!offrampConfig.fallbackToMockOnError) throw e;
       return this.fallback.create(input);
     }
+  }
+
+  async status(payoutId: string) {
+    assertLiveConfig();
+    if (offrampConfig.mode !== "live") return this.fallback.status(payoutId);
+
+    if (offrampConfig.provider === "clova") {
+      const data = await offrampRequest(`/v1/orders/${encodeURIComponent(payoutId)}`, "GET");
+      return {
+        payoutId,
+        status: String(data.status || "unknown"),
+        updatedAt: Number(data.updatedAt || Date.now()),
+      };
+    }
+
+    const data = await offrampRequest(`${offrampConfig.endpoints.status}/${encodeURIComponent(payoutId)}`, "GET");
+    return {
+      payoutId,
+      status: String(data.status || "unknown"),
+      updatedAt: Number(data.updatedAt || Date.now()),
+    };
   }
 }

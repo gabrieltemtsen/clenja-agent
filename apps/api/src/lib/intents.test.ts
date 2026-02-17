@@ -105,3 +105,11 @@ test("parse swap intent", () => {
     assert.equal(i.amount, "10");
   }
 });
+
+test("parse cashout status intent", () => {
+  const i = parseIntent("cashout status ord_12345");
+  assert.equal(i.kind, "cashout_status");
+  if (i.kind === "cashout_status") {
+    assert.equal(i.orderId, "ord_12345");
+  }
+});
