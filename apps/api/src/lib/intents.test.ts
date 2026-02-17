@@ -113,3 +113,8 @@ test("parse cashout status intent", () => {
     assert.equal(i.orderId, "ord_12345");
   }
 });
+
+test("parse list banks intent", () => {
+  const i = parseIntent("list banks");
+  assert.equal(i.kind, "list_banks");
+});

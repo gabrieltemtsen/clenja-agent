@@ -6,6 +6,7 @@ export interface OfframpProvider {
   quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse>;
   create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled"; depositAddress?: string; receiveAmount?: string }>;
   status(payoutId: string): Promise<{ payoutId: string; status: string; updatedAt?: number }>;
+  listBanks(country?: string): Promise<Array<{ name: string; code: string }>>;
 }
 
 type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
@@ -120,6 +121,16 @@ export class MockOfframpProvider implements OfframpProvider {
   async status(payoutId: string) {
     return { payoutId, status: "pending", updatedAt: Date.now() };
   }
+
+  async listBanks(_country?: string) {
+    return [
+      { name: "Access Bank", code: "044" },
+      { name: "Guaranty Trust Bank", code: "058" },
+      { name: "United Bank For Africa", code: "033" },
+      { name: "Zenith Bank", code: "057" },
+      { name: "First Bank of Nigeria", code: "011" },
+    ];
+  }
 }
 
 export class LiveOfframpProvider implements OfframpProvider {
@@ -233,5 +244,18 @@ export class LiveOfframpProvider implements OfframpProvider {
       status: String(data.status || "unknown"),
       updatedAt: Number(data.updatedAt || Date.now()),
     };
+  }
+
+  async listBanks(country = "nigeria") {
+    assertLiveConfig();
+    if (offrampConfig.mode !== "live") return this.fallback.listBanks(country);
+
+    if (offrampConfig.provider === "clova") {
+      const data = await offrampRequest(`/v1/banks?country=${encodeURIComponent(country)}`, "GET");
+      return Array.isArray(data?.banks) ? data.banks : [];
+    }
+
+    // Legacy provider has no bank discovery route yet.
+    return this.fallback.listBanks(country);
   }
 }

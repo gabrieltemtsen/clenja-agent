@@ -20,6 +20,13 @@ function fuzzyIncludes(a: string, b: string) {
   return aa.includes(bb) || bb.includes(aa);
 }
 
+function parseBankDetails(raw?: string) {
+  if (!raw) return null;
+  const m = raw.trim().match(/^(\d{10})\s+(.+)$/);
+  if (!m) return null;
+  return { accountNumber: m[1], bankNameQuery: m[2].trim() };
+}
+
 const chatSchema = z.object({ userId: z.string(), text: z.string() });
 
 chatRouter.post("/message", async (req, res) => {
@@ -43,7 +50,7 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', 'cashout 50 cUSD' (NGN cashout is cUSD-first), or 'cashout status ord_...'."
+      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', 'list banks', 'cashout 50 cUSD to 0123456789 Access Bank', or 'cashout status ord_...'."
     });
   }
 
@@ -186,6 +193,16 @@ chatRouter.post("/message", async (req, res) => {
     }
   }
 
+  if (intent.kind === "list_banks") {
+    try {
+      const banks = await offramp.listBanks("nigeria");
+      const top = banks.slice(0, 15).map((b: { name: string; code: string }) => `• ${b.name} (${b.code})`).join("\n");
+      return res.json({ reply: banks.length ? `Available NG banks:\n${top}\n\nUse: cashout <amount> cUSD to <account_number> <bank name>` : "No banks returned right now. Try again shortly.", data: { count: banks.length } });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+    }
+  }
+
   if (intent.kind === "swap") {
     if (intent.fromToken === intent.toToken) return res.json({ reply: "From and to token are the same. Try CELO -> cUSD or cUSD -> CELO." });
 
@@ -262,22 +279,45 @@ chatRouter.post("/message", async (req, res) => {
 
     let beneficiary: { country: string; bankName: string; accountName: string; accountNumber: string; bankCode?: string } | undefined;
     if (intent.beneficiaryName) {
-      const matches = store.listBeneficiaries(userId).filter((b) => fuzzyIncludes(b.accountName, intent.beneficiaryName!));
-      if (matches.length === 1) {
-        const found = matches[0];
-        beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked, bankCode: offrampConfig.defaultBeneficiary.bankCode };
-      } else if (matches.length > 1) {
-        return res.json({ reply: `I found multiple beneficiaries for '${intent.beneficiaryName}': ${matches.map((m) => m.accountName).join(", ")}. Please be more specific.` });
+      const parsedBank = parseBankDetails(intent.beneficiaryName);
+      if (parsedBank) {
+        try {
+          const banks = await offramp.listBanks("nigeria");
+          const bankMatches = banks.filter((b: { name: string; code: string }) => fuzzyIncludes(b.name, parsedBank.bankNameQuery));
+          if (bankMatches.length === 0) {
+            const top = banks.slice(0, 8).map((b: { name: string; code: string }) => b.name).join(", ");
+            return res.json({ reply: `I couldn't find bank '${parsedBank.bankNameQuery}'. Try one of: ${top}.` });
+          }
+          if (bankMatches.length > 1) {
+            return res.json({ reply: `I found multiple banks for '${parsedBank.bankNameQuery}': ${bankMatches.slice(0, 8).map((b: { name: string; code: string }) => b.name).join(", ")}. Please be more specific.` });
+          }
+
+          const bank = bankMatches[0];
+          beneficiary = {
+            country: "NG",
+            bankName: bank.name,
+            accountName: offrampConfig.defaultBeneficiary.accountName || "Clenja User",
+            accountNumber: parsedBank.accountNumber,
+            bankCode: bank.code,
+          };
+        } catch (e) {
+          return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+        }
       } else {
-        return res.json({ reply: `No beneficiary found for '${intent.beneficiaryName}'. Save one in /beneficiaries first.` });
+        const matches = store.listBeneficiaries(userId).filter((b) => fuzzyIncludes(b.accountName, intent.beneficiaryName!));
+        if (matches.length === 1) {
+          const found = matches[0];
+          beneficiary = { country: found.country, bankName: found.bankName, accountName: found.accountName, accountNumber: found.accountNumberMasked, bankCode: offrampConfig.defaultBeneficiary.bankCode };
+        } else if (matches.length > 1) {
+          return res.json({ reply: `I found multiple beneficiaries for '${intent.beneficiaryName}': ${matches.map((m) => m.accountName).join(", ")}. Please be more specific.` });
+        } else {
+          return res.json({ reply: "For NG cashout, use: cashout <amount> cUSD to <account_number> <bank name>. Example: cashout 50 cUSD to 0123456789 Access Bank" });
+        }
       }
     }
 
     if (!beneficiary && offrampConfig.mode === "live" && offrampConfig.provider === "clova") {
-      const d = offrampConfig.defaultBeneficiary;
-      if (!d.accountName || !d.accountNumber || !d.bankCode) {
-        return res.json({ reply: "Cashout setup incomplete: set default NG beneficiary (account name, account number, bank code) in API env before running live Clova cashout." });
-      }
+      return res.json({ reply: "Please provide bank details in this format: cashout <amount> cUSD to <account_number> <bank name>. You can also run 'list banks'." });
     }
 
     try {
