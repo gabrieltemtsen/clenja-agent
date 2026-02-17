@@ -73,6 +73,15 @@ async function mentoClient() {
   return Mento.create(provider as any);
 }
 
+async function waitForReceipt(txHash: string, maxAttempts = 20, delayMs = 2000) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const receipt = await rpc("eth_getTransactionReceipt", [txHash]);
+    if (receipt) return receipt;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  throw new Error("tx_receipt_timeout");
+}
+
 async function sendTurnkeyTx(userId: string, address: string, walletId: string, txReq: any) {
   const nonceHex = await rpc("eth_getTransactionCount", [address, "pending"]);
   const gasPriceHex = await rpc("eth_gasPrice", []);
@@ -304,6 +313,20 @@ export class TurnkeyWalletProvider implements WalletProvider {
 
     const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
     const txHash = await sendTurnkeyTx(input.userId, address, walletId, swapTxObj);
+    const receipt = await waitForReceipt(String(txHash));
+    const ok = String(receipt?.status || "").toLowerCase() === "0x1";
+    if (!ok) {
+      store.addAudit({
+        id: `aud_${Date.now()}`,
+        ts: Date.now(),
+        userId: input.userId,
+        action: "turnkey.swap",
+        status: "error",
+        detail: { txHash, walletId, fromToken: input.fromToken, toToken: input.toToken, amountIn: input.amountIn, minAmountOut: input.minAmountOut, reason: "reverted" },
+      });
+      throw new Error(`swap_tx_reverted:${txHash}`);
+    }
+
     swapQuoteCache.delete(input.quoteId);
 
     store.addAudit({
