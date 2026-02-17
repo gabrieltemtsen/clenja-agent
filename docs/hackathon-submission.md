@@ -20,10 +20,11 @@ CLENJA is a Telegram-first agentic finance assistant on Celo with wallet operati
 ## Submission Evidence Checklist
 - [ ] Karma project link
 - [ ] Demo video link
-- [ ] Repo link
+- [x] Repo link: https://github.com/gabrieltemtsen/clenja-agent
 - [ ] Tweet link tagging @Celo and @CeloDevs
 - [ ] x402 endpoint evidence (request/402/paid flow)
-- [ ] Onchain tx/receipt examples
+- [x] Onchain tx/receipt examples (swap execution samples captured)
+- [x] ERC-8004 agent registration: https://www.8004scan.io/agents/celo/132
 - [ ] Self unavailable-region screenshot attached
 - [ ] (Optional) Molthunt registration link
 
