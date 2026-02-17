@@ -309,7 +309,20 @@ export class TurnkeyWalletProvider implements WalletProvider {
     // Mento broker pulls input token via transferFrom during swapIn.
     // CELO on Celo behaves as ERC-20 here as well, so allowance is required.
     const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
-    await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
+    const allowanceTxHash = await sendTurnkeyTx(input.userId, address, walletId, allowanceTxObj);
+    const allowanceReceipt = await waitForReceipt(String(allowanceTxHash));
+    const allowanceOk = String(allowanceReceipt?.status || "").toLowerCase() === "0x1";
+    if (!allowanceOk) {
+      store.addAudit({
+        id: `aud_${Date.now()}`,
+        ts: Date.now(),
+        userId: input.userId,
+        action: "turnkey.swap.allowance",
+        status: "error",
+        detail: { allowanceTxHash, walletId, fromToken: input.fromToken, toToken: input.toToken, amountIn: input.amountIn, reason: "allowance_reverted" },
+      });
+      throw new Error(`swap_allowance_tx_reverted:${allowanceTxHash}`);
+    }
 
     const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
     const txHash = await sendTurnkeyTx(input.userId, address, walletId, swapTxObj);
