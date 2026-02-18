@@ -30,6 +30,7 @@ export const offrampConfig = {
   // Expected format depends on upstream x402 provider (e.g. thirdweb settlePayment payload).
   x402PaymentHeader: process.env.OFFRAMP_X402_PAYMENT_HEADER || "",
   watcherToken: process.env.OFFRAMP_WATCHER_TOKEN || "",
+  minConfirmations: Number(process.env.OFFRAMP_MIN_CONFIRMATIONS || 3),
   timeoutMs: Number(process.env.OFFRAMP_TIMEOUT_MS || 15000),
   fallbackToMockOnError: (process.env.OFFRAMP_FALLBACK_TO_MOCK_ON_ERROR || "true").toLowerCase() === "true",
   endpoints: {

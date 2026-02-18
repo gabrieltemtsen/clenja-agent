@@ -52,7 +52,8 @@ function humanizeCashoutStatus(status: string) {
   const s = status.toLowerCase();
   if (s.includes("awaiting_deposit")) return "waiting for deposit confirmation";
   if (s.includes("confirm")) return "confirming onchain deposit";
-  if (s.includes("paid_out") || s.includes("settled")) return "paid out to bank";
+  if (s.includes("paid_out")) return "bank transfer initiated";
+  if (s.includes("settled")) return "credited to bank";
   if (s.includes("fail")) return "failed";
   return status;
 }
@@ -524,7 +525,7 @@ chatRouter.post("/confirm", async (req, res) => {
           fromToken: (ctx.token || "cUSD") as "CELO" | "cUSD",
           amount: String(ctx.amount),
           txHash: sent.txHash,
-          confirmations: 1,
+          confirmations: offrampConfig.minConfirmations,
         });
         watcherStatus = notify?.status || (notify?.accepted ? "watcher_accepted" : "watcher_not_accepted");
       }
