@@ -31,6 +31,8 @@ export const offrampConfig = {
   x402PaymentHeader: process.env.OFFRAMP_X402_PAYMENT_HEADER || "",
   watcherToken: process.env.OFFRAMP_WATCHER_TOKEN || "",
   minConfirmations: Number(process.env.OFFRAMP_MIN_CONFIRMATIONS || 3),
+  postConfirmWaitMs: Number(process.env.OFFRAMP_POST_CONFIRM_WAIT_MS || 90000),
+  postConfirmPollMs: Number(process.env.OFFRAMP_POST_CONFIRM_POLL_MS || 5000),
   timeoutMs: Number(process.env.OFFRAMP_TIMEOUT_MS || 15000),
   fallbackToMockOnError: (process.env.OFFRAMP_FALLBACK_TO_MOCK_ON_ERROR || "true").toLowerCase() === "true",
   endpoints: {

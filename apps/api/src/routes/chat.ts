@@ -58,6 +58,10 @@ function humanizeCashoutStatus(status: string) {
   return status;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseCashoutBankDetails(input: string) {
   const t = input.trim();
   const acctMatch = t.match(/(?:account(?:\s*number)?\s*[:=]?\s*)?(\d{10})/i);
@@ -532,12 +536,16 @@ chatRouter.post("/confirm", async (req, res) => {
 
       let refreshedStatusText: string = order.status;
       try {
-        // short retry window to let watcher settlement move status off awaiting_deposit
-        for (let i = 0; i < 3; i += 1) {
+        // Hold the OTP response until payout pipeline advances or timeout window ends.
+        const waitMs = Math.max(5000, offrampConfig.postConfirmWaitMs || 90000);
+        const pollMs = Math.max(1000, offrampConfig.postConfirmPollMs || 5000);
+        const deadline = Date.now() + waitMs;
+
+        while (Date.now() < deadline) {
           const s = await offramp.status(order.payoutId);
           refreshedStatusText = s.status || order.status;
-          if (refreshedStatusText !== "awaiting_deposit") break;
-          await new Promise((r) => setTimeout(r, 1200));
+          if (["paid_out", "settled", "failed"].includes(refreshedStatusText)) break;
+          await sleep(pollMs);
         }
       } catch {
         // keep initial status if status fetch fails transiently
@@ -556,9 +564,18 @@ chatRouter.post("/confirm", async (req, res) => {
       const depositLine = depositTxHash ? `\nDeposit sent: https://celoscan.io/tx/${depositTxHash}` : "";
       const watcherLine = watcherStatus && watcherStatus !== "watcher_accepted" ? `\nSettlement sync: ${watcherStatus}` : "";
       const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
-      const userStatus = refreshedStatusText === "awaiting_deposit" ? "order confirmed — deposit is being verified" : humanizeCashoutStatus(refreshedStatusText);
+      const userStatus = refreshedStatusText === "awaiting_deposit"
+        ? "processing — deposit is still being verified"
+        : humanizeCashoutStatus(refreshedStatusText);
+      const headline = refreshedStatusText === "settled"
+        ? "✅ Cashout completed"
+        : refreshedStatusText === "paid_out"
+          ? "✅ Bank transfer initiated"
+          : refreshedStatusText === "failed"
+            ? "❌ Cashout failed"
+            : "⏳ Cashout is processing";
       return res.json({
-        reply: `✅ Cashout order confirmed. Order: ${order.payoutId}\nStatus: ${userStatus}${receiveLine}${depositLine}${watcherLine}${trackLine}`,
+        reply: `${headline}. Order: ${order.payoutId}\nStatus: ${userStatus}${receiveLine}${depositLine}${watcherLine}${trackLine}`,
         payoutId: order.payoutId,
         depositAddress: order.depositAddress,
         depositTxHash,
