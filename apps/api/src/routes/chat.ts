@@ -28,6 +28,35 @@ async function resolveBankCode(bankName: string) {
   return fuzzy?.code || "";
 }
 
+function formatAmount(value: string | number, maxDp = 4) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxDp });
+}
+
+function formatBalanceLine(token: string, amount: string) {
+  const dp = token === "cUSD" ? 2 : 4;
+  return `${formatAmount(amount, dp)} ${token}`;
+}
+
+function formatShortTime(ts?: number) {
+  if (!ts) return "just now";
+  const diffMs = Date.now() - ts;
+  const mins = Math.max(1, Math.round(diffMs / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  return `${hours}h ago`;
+}
+
+function humanizeCashoutStatus(status: string) {
+  const s = status.toLowerCase();
+  if (s.includes("awaiting_deposit")) return "waiting for deposit confirmation";
+  if (s.includes("confirm")) return "confirming onchain deposit";
+  if (s.includes("paid_out") || s.includes("settled")) return "paid out to bank";
+  if (s.includes("fail")) return "failed";
+  return status;
+}
+
 function parseCashoutBankDetails(input: string) {
   const t = input.trim();
   const acctMatch = t.match(/(?:account(?:\s*number)?\s*[:=]?\s*)?(\d{10})/i);
@@ -85,12 +114,12 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "help") {
     return res.json({
-      reply: "I can help with balances, transfers, swaps, recipients, limits, and cashout. Try: 'swap 10 CELO to cUSD', 'save recipient Gabriel 0xabc...','send 5 cUSD to Gabriel','list recipients','set daily limit 50', 'cashout 50 cUSD' (NGN cashout is cUSD-first), or 'cashout status ord_...'."
+      reply: "I can help with balance checks, sends, swaps, limits, and cashout. Try: ‘swap 10 CELO to cUSD’, ‘send 5 cUSD to Gabriel’, ‘cashout 50 cUSD’, or ‘what’s the status of my cashout?’"
     });
   }
 
   if (intent.kind === "greeting") {
-    return res.json({ reply: "Hey 👋 I’m ready. Ask me to check balance, send funds, or cashout." });
+    return res.json({ reply: "Hey 👋 Ready when you are. Want to check balance, swap, send, or cash out?" });
   }
 
   const pending = store.getPendingAction(userId);
@@ -204,7 +233,8 @@ chatRouter.post("/message", async (req, res) => {
   if (intent.kind === "balance") {
     try {
       const b = await wallet.getBalance(userId);
-      return res.json({ reply: `✅ Balance: ${b.balances.map((x) => `${x.amount} ${x.token}`).join(", ")}`, data: b });
+      const line = b.balances.map((x) => formatBalanceLine(x.token, x.amount)).join(" • ");
+      return res.json({ reply: `Your balance is ${line}. Want me to also check your latest cashout status?`, data: b });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
@@ -228,9 +258,9 @@ chatRouter.post("/message", async (req, res) => {
     if (!receipts.length) return res.json({ reply: "No transactions yet." });
     const lines = receipts.map((r) => {
       const link = r.ref.startsWith("0x") ? `https://celoscan.io/tx/${r.ref}` : r.ref;
-      return `• ${r.kind.toUpperCase()} ${r.amount} ${r.token} — ${link}`;
+      return `• ${r.kind}: ${formatAmount(r.amount, 4)} ${r.token} (${formatShortTime(r.createdAt)})\n  ${link}`;
     });
-    return res.json({ reply: `Recent transactions:\n${lines.join("\n")}`, receipts });
+    return res.json({ reply: `Here are your recent transactions:\n${lines.join("\n")}`, receipts });
   }
 
   if (intent.kind === "save_recipient") {
@@ -269,7 +299,7 @@ chatRouter.post("/message", async (req, res) => {
   if (intent.kind === "address") {
     try {
       const w = await wallet.createOrLinkUserWallet(userId);
-      return res.json({ reply: `🏦 Wallet address: ${w.walletAddress}`, walletAddress: w.walletAddress });
+      return res.json({ reply: `Here’s your wallet address:\n${w.walletAddress}`, walletAddress: w.walletAddress });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
@@ -284,7 +314,7 @@ chatRouter.post("/message", async (req, res) => {
       }
       try {
         const s = await offramp.status(latestCashout.ref);
-        return res.json({ reply: `Cashout ${latestCashout.ref}: ${s.status}${s.updatedAt ? ` (updated ${new Date(s.updatedAt).toISOString()})` : ""}.`, data: s });
+        return res.json({ reply: `Your latest cashout (${latestCashout.ref}) is ${humanizeCashoutStatus(s.status)}${s.updatedAt ? ` — updated ${formatShortTime(s.updatedAt)}` : ""}.`, data: s });
       } catch (e) {
         return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
       }
@@ -296,7 +326,7 @@ chatRouter.post("/message", async (req, res) => {
   if (intent.kind === "cashout_status") {
     try {
       const s = await offramp.status(intent.orderId);
-      return res.json({ reply: `Cashout ${intent.orderId}: ${s.status}${s.updatedAt ? ` (updated ${new Date(s.updatedAt).toISOString()})` : ""}.`, data: s });
+      return res.json({ reply: `Cashout ${intent.orderId} is ${humanizeCashoutStatus(s.status)}${s.updatedAt ? ` — updated ${formatShortTime(s.updatedAt)}` : ""}.`, data: s });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
     }
@@ -316,7 +346,7 @@ chatRouter.post("/message", async (req, res) => {
       const expected = Number(quote.amountOut);
       const code = String(Math.round(expected * 10000)).slice(-4).padStart(4, "0");
       const ch = createChallenge({ userId, type: "new_recipient_last4", expected: code, context: { kind: "swap", quoteId: quote.quoteId, fromToken: intent.fromToken, toToken: intent.toToken, amountIn: intent.amount, minAmountOut: quote.minAmountOut } });
-      return res.json({ reply: `Swap quote: ${intent.amount} ${intent.fromToken} -> ~${quote.amountOut} ${intent.toToken} (min ${quote.minAmountOut}). Confirm with code ${code}.`, challengeId: ch.id, action: "awaiting_confirmation" });
+      return res.json({ reply: `I can swap ${formatAmount(intent.amount, 4)} ${intent.fromToken} to about ${formatAmount(quote.amountOut, 4)} ${intent.toToken} (min ${formatAmount(quote.minAmountOut, 4)}). Reply with code ${code} to confirm.`, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
@@ -342,7 +372,7 @@ chatRouter.post("/message", async (req, res) => {
       const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: resolved.address });
       const last4 = resolved.address.slice(-4);
       const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: resolved.address, token: intent.token, amount: intent.amount } });
-      return res.json({ reply: `Confirm send to ${resolved.name} by typing last 4 chars (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+      return res.json({ reply: `You’re about to send ${formatAmount(intent.amount, 4)} ${intent.token} to ${resolved.name}. Reply with ${last4} to confirm.`, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
@@ -359,7 +389,7 @@ chatRouter.post("/message", async (req, res) => {
       const q = await wallet.prepareSend({ fromUserId: userId, token: intent.token as "CELO" | "cUSD", amount: intent.amount, to: intent.to });
       const last4 = intent.to.slice(-4);
       const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to: intent.to, token: intent.token, amount: intent.amount } });
-      return res.json({ reply: `Confirm send by typing last 4 chars of recipient (${last4})`, challengeId: ch.id, action: "awaiting_confirmation" });
+      return res.json({ reply: `You’re about to send ${formatAmount(intent.amount, 4)} ${intent.token}. Reply with ${last4} to confirm the recipient.`, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
     }
@@ -400,7 +430,7 @@ chatRouter.post("/message", async (req, res) => {
           token: intent.token,
         });
         return res.json({
-          reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN.${expiry}\nSend bank details in one line: <account_number> <bank name>\nExample: 0123456789 Access Bank`,
+          reply: `Cashout quote is ready 💸 You’ll receive about ${formatAmount(quote.receiveAmount, 2)} NGN.${expiry}\nNow send bank details in one line: <account_number> <bank name>\nExample: 0123456789 Access Bank`,
           quote,
           action: "awaiting_bank_details",
         });
@@ -408,7 +438,7 @@ chatRouter.post("/message", async (req, res) => {
 
       const otp = "123456";
       const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
-      return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN.${expiry} Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+      return res.json({ reply: `Cashout quote is ready 💸 You’ll receive about ${formatAmount(quote.receiveAmount, 2)} NGN.${expiry} Reply with OTP 123456 to continue.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
     }
@@ -437,7 +467,7 @@ chatRouter.post("/confirm", async (req, res) => {
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
       const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
-      return res.json({ reply: `✅ Sent ${ctx.amount} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${tx.txHash}\n${txUrl}`, txHash: tx.txHash, txUrl });
+      return res.json({ reply: `Done ✅ Sent ${formatAmount(ctx.amount, 4)} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${txUrl}`, txHash: tx.txHash, txUrl });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
@@ -451,7 +481,7 @@ chatRouter.post("/confirm", async (req, res) => {
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "swap", amount: String(ctx.amountIn), token: `${ctx.fromToken}->${ctx.toToken}`, ref: tx.txHash, createdAt: Date.now() });
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "ok", detail: { txHash: tx.txHash } });
       const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
-      return res.json({ reply: `✅ Swapped ${ctx.amountIn} ${ctx.fromToken} to ${ctx.toToken}.\nTx: ${tx.txHash}\n${txUrl}`, txHash: tx.txHash, txUrl });
+      return res.json({ reply: `Swap complete ✅ ${formatAmount(ctx.amountIn, 4)} ${ctx.fromToken} → ${ctx.toToken}.\nTx: ${txUrl}`, txHash: tx.txHash, txUrl });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
