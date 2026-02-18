@@ -129,3 +129,11 @@ test("parse track cashout with embedded id", () => {
     assert.equal(i.orderId, "po_abc123");
   }
 });
+
+test("parse spaced cash out status phrasing", () => {
+  const i = parseIntent("what's my cash out status ord_abc123");
+  assert.equal(i.kind, "cashout_status");
+  if (i.kind === "cashout_status") {
+    assert.equal(i.orderId, "ord_abc123");
+  }
+});
