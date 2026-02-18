@@ -8,6 +8,7 @@ export interface OfframpProvider {
   status(payoutId: string): Promise<{ payoutId: string; status: string; updatedAt?: number }>;
   listBanks?(country: string): Promise<Array<{ name: string; code: string }>>;
   verifyRecipient?(input: { accountNumber: string; bankCode: string; accountName?: string }): Promise<{ verified: boolean; accountName?: string }>;
+  notifyDeposit?(input: { orderId: string; fromToken: "cUSD" | "CELO"; amount: string; txHash: string; confirmations?: number }): Promise<{ accepted: boolean; status?: string }>;
 }
 
 type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
@@ -96,6 +97,10 @@ function mapOrderStatus(status: string): "pending" | "processing" | "settled" {
 }
 
 export class MockOfframpProvider implements OfframpProvider {
+  async notifyDeposit(_: { orderId: string; fromToken: "cUSD" | "CELO"; amount: string; txHash: string; confirmations?: number }) {
+    return { accepted: true, status: "mock_notified" };
+  }
+
   async verifyRecipient(input: { accountNumber: string; bankCode: string; accountName?: string }) {
     return { verified: true, accountName: input.accountName || "Mock Verified Account" };
   }
@@ -140,6 +145,46 @@ export class MockOfframpProvider implements OfframpProvider {
 
 export class LiveOfframpProvider implements OfframpProvider {
   private fallback = new MockOfframpProvider();
+
+  async notifyDeposit(input: { orderId: string; fromToken: "cUSD" | "CELO"; amount: string; txHash: string; confirmations?: number }) {
+    if (offrampConfig.mode !== "live") return this.fallback.notifyDeposit(input);
+    if (offrampConfig.provider === "clova") {
+      if (!offrampConfig.watcherToken) return { accepted: false, status: "watcher_token_missing" };
+      if (!offrampConfig.apiBase) return { accepted: false, status: "offramp_not_configured" };
+
+      const asset = input.fromToken === "cUSD" ? "cUSD_CELO" : undefined;
+      if (!asset) return { accepted: false, status: "asset_not_supported" };
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), offrampConfig.timeoutMs);
+      try {
+        const r = await fetch(`${offrampConfig.apiBase}/v1/watchers/deposits`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-watcher-token": offrampConfig.watcherToken,
+          },
+          body: JSON.stringify({
+            orderId: input.orderId,
+            asset,
+            amountCrypto: input.amount,
+            txHash: input.txHash,
+            confirmations: input.confirmations ?? 1,
+          }),
+          signal: ctrl.signal,
+        });
+
+        if (!r.ok) return { accepted: false, status: `watcher_http_${r.status}` };
+        const data = await r.json();
+        return { accepted: Boolean(data?.accepted), status: String(data?.status || "watcher_accepted") };
+      } catch {
+        return { accepted: false, status: "watcher_notify_failed" };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return this.fallback.notifyDeposit(input);
+  }
 
   async verifyRecipient(input: { accountNumber: string; bankCode: string; accountName?: string }) {
     if (offrampConfig.mode !== "live") return this.fallback.verifyRecipient(input);

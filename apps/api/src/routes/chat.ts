@@ -472,6 +472,7 @@ chatRouter.post("/confirm", async (req, res) => {
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
 
       let depositTxHash: string | undefined;
+      let watcherStatus = "not_sent";
       if (order.depositAddress) {
         const sendQuote = await wallet.prepareSend({
           fromUserId: userId,
@@ -487,12 +488,26 @@ chatRouter.post("/confirm", async (req, res) => {
           to: order.depositAddress,
         });
         depositTxHash = sent.txHash;
+
+        const notify = await offramp.notifyDeposit?.({
+          orderId: order.payoutId,
+          fromToken: (ctx.token || "cUSD") as "CELO" | "cUSD",
+          amount: String(ctx.amount),
+          txHash: sent.txHash,
+          confirmations: 1,
+        });
+        watcherStatus = notify?.status || (notify?.accepted ? "watcher_accepted" : "watcher_not_accepted");
       }
 
       let refreshedStatusText: string = order.status;
       try {
-        const s = await offramp.status(order.payoutId);
-        refreshedStatusText = s.status || order.status;
+        // short retry window to let watcher settlement move status off awaiting_deposit
+        for (let i = 0; i < 3; i += 1) {
+          const s = await offramp.status(order.payoutId);
+          refreshedStatusText = s.status || order.status;
+          if (refreshedStatusText !== "awaiting_deposit") break;
+          await new Promise((r) => setTimeout(r, 1200));
+        }
       } catch {
         // keep initial status if status fetch fails transiently
       }
@@ -503,14 +518,15 @@ chatRouter.post("/confirm", async (req, res) => {
         userId,
         action: "chat.cashout.execute",
         status: "ok",
-        detail: { payoutId: order.payoutId, status: refreshedStatusText, depositTxHash },
+        detail: { payoutId: order.payoutId, status: refreshedStatusText, depositTxHash, watcherStatus },
       });
 
       const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} NGN` : "";
       const depositLine = depositTxHash ? `\nDeposit sent: https://celoscan.io/tx/${depositTxHash}` : "";
+      const watcherLine = watcherStatus && watcherStatus !== "watcher_accepted" ? `\nSettlement sync: ${watcherStatus}` : "";
       const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
       return res.json({
-        reply: `✅ Cashout created and funded. Order: ${order.payoutId} (${refreshedStatusText})${receiveLine}${depositLine}${trackLine}`,
+        reply: `✅ Cashout created and funded. Order: ${order.payoutId} (${refreshedStatusText})${receiveLine}${depositLine}${watcherLine}${trackLine}`,
         payoutId: order.payoutId,
         depositAddress: order.depositAddress,
         depositTxHash,
