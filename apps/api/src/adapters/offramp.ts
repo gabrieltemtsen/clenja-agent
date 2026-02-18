@@ -6,6 +6,7 @@ export interface OfframpProvider {
   quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse>;
   create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled"; depositAddress?: string; receiveAmount?: string }>;
   status(payoutId: string): Promise<{ payoutId: string; status: string; updatedAt?: number }>;
+  listBanks?(country: string): Promise<Array<{ name: string; code: string }>>;
 }
 
 type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
@@ -94,6 +95,16 @@ function mapOrderStatus(status: string): "pending" | "processing" | "settled" {
 }
 
 export class MockOfframpProvider implements OfframpProvider {
+  async listBanks(_: string) {
+    return [
+      { name: "Access Bank", code: "044" },
+      { name: "GTBank", code: "058" },
+      { name: "First Bank", code: "011" },
+      { name: "UBA", code: "033" },
+      { name: "Zenith Bank", code: "057" },
+    ];
+  }
+
   async quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse> {
     const amount = Number(input.amount);
     const fee = Math.max(0.5, amount * 0.02);
@@ -124,6 +135,20 @@ export class MockOfframpProvider implements OfframpProvider {
 
 export class LiveOfframpProvider implements OfframpProvider {
   private fallback = new MockOfframpProvider();
+
+  async listBanks(country: string) {
+    if (offrampConfig.mode !== "live") return this.fallback.listBanks(country);
+    if (offrampConfig.provider === "clova") {
+      try {
+        const data = await offrampRequest(`/v1/banks?country=${encodeURIComponent(country)}`, "GET");
+        const banks = Array.isArray(data?.banks) ? data.banks : [];
+        return banks.map((b: any) => ({ name: String(b.name || ""), code: String(b.code || "") })).filter((b: any) => b.name && b.code);
+      } catch {
+        return this.fallback.listBanks(country);
+      }
+    }
+    return this.fallback.listBanks(country);
+  }
 
   async quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse> {
     assertLiveConfig();

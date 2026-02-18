@@ -32,7 +32,9 @@ const setDailyLimitRegex = /set\s+daily\s+limit\s+(\d+(?:\.\d+)?)/i;
 const setPerTxLimitRegex = /set\s+(?:per[- ]?tx|transaction)\s+limit\s+(\d+(?:\.\d+)?)/i;
 const swapRegex = /(?:swap|convert)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to|for)\s+(cusd|celo)/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
-const cashoutStatusRegex = /cashout\s+status\s+([a-zA-Z0-9_-]+)/i;
+const cashoutStatusRegex = /(?:cashout|payout|order)\s+status\s+([a-zA-Z0-9_-]+)/i;
+const payoutStatusRegex = /(?:payout|order)\s*[:#]?\s*((?:ord|po)_[a-zA-Z0-9-]+)\s*status\??/i;
+const embeddedOrderIdRegex = /\b((?:ord|po)_[a-zA-Z0-9-]+)\b/i;
 
 function normalizeToken(token: string): "cUSD" | "CELO" {
   return token.toLowerCase() === "cusd" ? "cUSD" : "CELO";
@@ -47,6 +49,14 @@ export function parseIntent(text: string): Intent {
   const cos = c.match(cashoutStatusRegex);
   if (cos) {
     return { kind: "cashout_status", orderId: cos[1] };
+  }
+  const pos = c.match(payoutStatusRegex);
+  if (pos) {
+    return { kind: "cashout_status", orderId: pos[1] };
+  }
+  if (/(cashout|payout|order)/i.test(c) && /(status|track|update|word)/i.test(c)) {
+    const embedded = c.match(embeddedOrderIdRegex);
+    if (embedded) return { kind: "cashout_status", orderId: embedded[1] };
   }
   if (/status|system status|readiness/i.test(c)) return { kind: "status" };
   if (/^(hi|hello|hey)\b/i.test(c) || /how are you/i.test(c)) return { kind: "greeting" };
