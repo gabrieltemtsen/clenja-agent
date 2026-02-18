@@ -6,6 +6,7 @@ const API_BASE = process.env.CLENJA_API_BASE || "http://localhost:8787";
 const MODE = (process.env.TELEGRAM_MODE || "polling").toLowerCase();
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL;
 const DATABASE_URL = process.env.DATABASE_URL;
+const TELEGRAM_PERSISTENT_KEYBOARD = (process.env.TELEGRAM_PERSISTENT_KEYBOARD || "false").toLowerCase() === "true";
 const pendingChallenges = new Map(); // fallback in-memory: userId -> challengeId
 const tradeUiState = new Map(); // fallback in-memory: userId -> { amount: string, slippage: number }
 const pendingUiInput = new Map(); // fallback in-memory: userId -> "amount" | "slippage"
@@ -78,11 +79,14 @@ async function apiCall(endpoint, payload, idempotencyKeyValue) {
 }
 
 async function sendMessage(chatId, text, replyToMessageId, withKeyboard = false) {
+  const showKeyboard = TELEGRAM_PERSISTENT_KEYBOARD && withKeyboard;
   return tg("sendMessage", {
     chat_id: chatId,
     text,
     ...(replyToMessageId ? { reply_parameters: { message_id: replyToMessageId } } : {}),
-    ...(withKeyboard ? { reply_markup: COMMAND_KEYBOARD } : {}),
+    ...(showKeyboard
+      ? { reply_markup: COMMAND_KEYBOARD }
+      : { reply_markup: { remove_keyboard: true } }),
   });
 }
 

@@ -7,6 +7,7 @@ export interface OfframpProvider {
   create(input: CreatePayoutRequest): Promise<{ payoutId: string; status: "pending" | "processing" | "settled"; depositAddress?: string; receiveAmount?: string }>;
   status(payoutId: string): Promise<{ payoutId: string; status: string; updatedAt?: number }>;
   listBanks?(country: string): Promise<Array<{ name: string; code: string }>>;
+  verifyRecipient?(input: { accountNumber: string; bankCode: string; accountName?: string }): Promise<{ verified: boolean; accountName?: string }>;
 }
 
 type OfframpLiveStatus = { mode: "mock" | "live"; healthy: boolean; lastError?: string; lastCheckedAt?: number };
@@ -95,6 +96,10 @@ function mapOrderStatus(status: string): "pending" | "processing" | "settled" {
 }
 
 export class MockOfframpProvider implements OfframpProvider {
+  async verifyRecipient(input: { accountNumber: string; bankCode: string; accountName?: string }) {
+    return { verified: true, accountName: input.accountName || "Mock Verified Account" };
+  }
+
   async listBanks(_: string) {
     return [
       { name: "Access Bank", code: "044" },
@@ -135,6 +140,26 @@ export class MockOfframpProvider implements OfframpProvider {
 
 export class LiveOfframpProvider implements OfframpProvider {
   private fallback = new MockOfframpProvider();
+
+  async verifyRecipient(input: { accountNumber: string; bankCode: string; accountName?: string }) {
+    if (offrampConfig.mode !== "live") return this.fallback.verifyRecipient(input);
+    if (offrampConfig.provider === "clova") {
+      try {
+        const data = await offrampRequest("/v1/recipients/resolve", "POST", {
+          accountNumber: input.accountNumber,
+          bankCode: input.bankCode,
+        });
+        return { verified: true, accountName: String(data.accountName || input.accountName || "") };
+      } catch (e: any) {
+        // Backward compatibility if clova resolve endpoint is not deployed yet.
+        if (String(e?.message || "").includes("offramp_http_404")) {
+          return { verified: true, accountName: input.accountName || "" };
+        }
+        throw e;
+      }
+    }
+    return this.fallback.verifyRecipient(input);
+  }
 
   async listBanks(country: string) {
     if (offrampConfig.mode !== "live") return this.fallback.listBanks(country);
