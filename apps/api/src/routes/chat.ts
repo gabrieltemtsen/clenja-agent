@@ -556,8 +556,9 @@ chatRouter.post("/confirm", async (req, res) => {
       const depositLine = depositTxHash ? `\nDeposit sent: https://celoscan.io/tx/${depositTxHash}` : "";
       const watcherLine = watcherStatus && watcherStatus !== "watcher_accepted" ? `\nSettlement sync: ${watcherStatus}` : "";
       const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
+      const userStatus = refreshedStatusText === "awaiting_deposit" ? "order confirmed — deposit is being verified" : humanizeCashoutStatus(refreshedStatusText);
       return res.json({
-        reply: `✅ Cashout created and funded. Order: ${order.payoutId} (${refreshedStatusText})${receiveLine}${depositLine}${watcherLine}${trackLine}`,
+        reply: `✅ Cashout order confirmed. Order: ${order.payoutId}\nStatus: ${userStatus}${receiveLine}${depositLine}${watcherLine}${trackLine}`,
         payoutId: order.payoutId,
         depositAddress: order.depositAddress,
         depositTxHash,
