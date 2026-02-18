@@ -307,7 +307,7 @@ chatRouter.post("/message", async (req, res) => {
   }
 
   if (intent.kind === "status") {
-    const asksCashoutStatus = /(cashout|payout|offramp|withdraw(?:al)?|order)/i.test(text);
+    const asksCashoutStatus = /(cash\s*out|cashout|payout|offramp|withdraw(?:al)?|order)/i.test(text);
     if (asksCashoutStatus) {
       const latestCashout = store.listReceipts(userId).filter((r) => r.kind === "cashout").slice(-1)[0];
       if (!latestCashout) {

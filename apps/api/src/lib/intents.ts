@@ -32,7 +32,7 @@ const setDailyLimitRegex = /set\s+daily\s+limit\s+(\d+(?:\.\d+)?)/i;
 const setPerTxLimitRegex = /set\s+(?:per[- ]?tx|transaction)\s+limit\s+(\d+(?:\.\d+)?)/i;
 const swapRegex = /(?:swap|convert)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to|for)\s+(cusd|celo)/i;
 const cashoutRegex = /cashout\s+(\d+(?:\.\d+)?)\s+(cusd|celo)(?:\s+to\s+(.+))?/i;
-const cashoutStatusRegex = /(?:cashout|payout|order)\s+status\s+([a-zA-Z0-9_-]+)/i;
+const cashoutStatusRegex = /(?:cash\s*out|cashout|payout|order)\s+status\s+([a-zA-Z0-9_-]+)/i;
 const payoutStatusRegex = /(?:payout|order)\s*[:#]?\s*((?:ord|po)_[a-zA-Z0-9-]+)\s*status\??/i;
 const embeddedOrderIdRegex = /\b((?:ord|po)_[a-zA-Z0-9-]+)\b/i;
 
@@ -54,7 +54,7 @@ export function parseIntent(text: string): Intent {
   if (pos) {
     return { kind: "cashout_status", orderId: pos[1] };
   }
-  if (/(cashout|payout|order)/i.test(c) && /(status|track|update|word)/i.test(c)) {
+  if (/(cash\s*out|cashout|payout|order)/i.test(c) && /(status|track|update|word)/i.test(c)) {
     const embedded = c.match(embeddedOrderIdRegex);
     if (embedded) return { kind: "cashout_status", orderId: embedded[1] };
   }
