@@ -129,6 +129,21 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: `I couldn't resolve bank code for '${details.bankName}'. Please send the exact bank name (e.g. Access Bank, UBA, Zenith Bank).` });
     }
 
+    let verifiedName = details.accountName;
+    try {
+      const vr = await offramp.verifyRecipient?.({
+        accountNumber: details.accountNumber,
+        bankCode,
+        accountName: details.accountName,
+      });
+      if (vr && !vr.verified) {
+        return res.json({ reply: "I couldn't verify that bank account. Please double-check account number and bank name." });
+      }
+      verifiedName = vr?.accountName || details.accountName;
+    } catch {
+      return res.json({ reply: "Bank account verification failed. Please re-check details and try again." });
+    }
+
     const otp = "123456";
     const ch = createChallenge({
       userId,
@@ -142,7 +157,7 @@ chatRouter.post("/message", async (req, res) => {
         beneficiary: {
           country: "NG",
           bankName: details.bankName,
-          accountName: details.accountName,
+          accountName: verifiedName,
           accountNumber: details.accountNumber,
           bankCode,
         },
@@ -151,7 +166,7 @@ chatRouter.post("/message", async (req, res) => {
 
     store.clearPendingAction(userId);
     return res.json({
-      reply: `Got it ✅\n• Bank: ${details.bankName}\n• Account: ${details.accountNumber}\n• Name: ${details.accountName}\nReply with OTP 123456 to create and start the cashout.`,
+      reply: `Got it ✅ (account verified)\n• Bank: ${details.bankName}\n• Account: ${details.accountNumber}\n• Name: ${verifiedName}\nReply with OTP 123456 to create and start the cashout.`,
       challengeId: ch.id,
       action: "awaiting_confirmation",
     });
@@ -455,11 +470,51 @@ chatRouter.post("/confirm", async (req, res) => {
       const order = await offramp.create({ userId, quoteId: ctx.quoteId, fromToken: ctx.token, amount: String(ctx.amount), beneficiary, otp: answer });
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
-      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "ok", detail: { payoutId: order.payoutId, status: order.status } });
-      const depositLine = order.depositAddress ? `\nDeposit: ${order.depositAddress}` : "";
+
+      let depositTxHash: string | undefined;
+      if (order.depositAddress) {
+        const sendQuote = await wallet.prepareSend({
+          fromUserId: userId,
+          token: (ctx.token || "cUSD") as "CELO" | "cUSD",
+          amount: String(ctx.amount),
+          to: order.depositAddress,
+        });
+        const sent = await wallet.executeSend({
+          userId,
+          quoteId: sendQuote.quoteId,
+          token: (ctx.token || "cUSD") as "CELO" | "cUSD",
+          amount: String(ctx.amount),
+          to: order.depositAddress,
+        });
+        depositTxHash = sent.txHash;
+      }
+
+      let refreshedStatusText: string = order.status;
+      try {
+        const s = await offramp.status(order.payoutId);
+        refreshedStatusText = s.status || order.status;
+      } catch {
+        // keep initial status if status fetch fails transiently
+      }
+
+      store.addAudit({
+        id: `aud_${Date.now()}`,
+        ts: Date.now(),
+        userId,
+        action: "chat.cashout.execute",
+        status: "ok",
+        detail: { payoutId: order.payoutId, status: refreshedStatusText, depositTxHash },
+      });
+
       const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} NGN` : "";
+      const depositLine = depositTxHash ? `\nDeposit sent: https://celoscan.io/tx/${depositTxHash}` : "";
       const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
-      return res.json({ reply: `✅ Cashout created. Order: ${order.payoutId} (${order.status})${receiveLine}${depositLine}${trackLine}`, payoutId: order.payoutId, depositAddress: order.depositAddress });
+      return res.json({
+        reply: `✅ Cashout created and funded. Order: ${order.payoutId} (${refreshedStatusText})${receiveLine}${depositLine}${trackLine}`,
+        payoutId: order.payoutId,
+        depositAddress: order.depositAddress,
+        depositTxHash,
+      });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
