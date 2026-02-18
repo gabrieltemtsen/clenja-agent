@@ -20,6 +20,48 @@ function fuzzyIncludes(a: string, b: string) {
   return aa.includes(bb) || bb.includes(aa);
 }
 
+async function resolveBankCode(bankName: string) {
+  const banks: Array<{ name: string; code: string }> = (await offramp.listBanks?.("nigeria")) || [];
+  const exact = banks.find((b: { name: string; code: string }) => b.name.toLowerCase() === bankName.toLowerCase());
+  if (exact) return exact.code;
+  const fuzzy = banks.find((b: { name: string; code: string }) => fuzzyIncludes(b.name, bankName));
+  return fuzzy?.code || "";
+}
+
+function parseCashoutBankDetails(input: string) {
+  const t = input.trim();
+  const acctMatch = t.match(/(?:account(?:\s*number)?\s*[:=]?\s*)?(\d{10})/i);
+  if (!acctMatch) return null;
+
+  const accountNumber = acctMatch[1];
+  let bankName = "";
+  let accountName = "";
+
+  const bankLabel = t.match(/bank\s*[:=]\s*([^,;\n]+)/i);
+  if (bankLabel) bankName = bankLabel[1].trim();
+
+  const nameLabel = t.match(/account\s*name\s*[:=]\s*([^,;\n]+)/i);
+  if (nameLabel) accountName = nameLabel[1].trim();
+
+  if (!bankName) {
+    const withoutAcct = t.replace(acctMatch[0], " ").replace(/\s+/g, " ").trim();
+    bankName = withoutAcct
+      .replace(/^to\s+/i, "")
+      .replace(/^bank\s*/i, "")
+      .replace(/^account\s*name\s*[:=]?.*$/i, "")
+      .replace(/[,:;]+$/g, "")
+      .trim();
+  }
+
+  if (!accountName) {
+    accountName = "Cashout Recipient";
+  }
+
+  if (!bankName) return null;
+
+  return { accountNumber, bankName, accountName };
+}
+
 const chatSchema = z.object({ userId: z.string(), text: z.string() });
 
 chatRouter.post("/message", async (req, res) => {
@@ -51,8 +93,9 @@ chatRouter.post("/message", async (req, res) => {
     return res.json({ reply: "Hey 👋 I’m ready. Ask me to check balance, send funds, or cashout." });
   }
 
+  const pending = store.getPendingAction(userId);
+
   if (intent.kind === "confirm_yes") {
-    const pending = store.getPendingAction(userId);
     if (!pending) return res.json({ reply: "Nothing pending confirmation right now." });
 
     if (pending.kind === "update_recipient") {
@@ -68,6 +111,50 @@ chatRouter.post("/message", async (req, res) => {
       store.clearPendingAction(userId);
       return res.json({ reply: ok ? `🗑️ Deleted recipient '${name}'.` : `I couldn't find recipient '${name}'.` });
     }
+  }
+
+  if (pending?.kind === "cashout_bank_details") {
+    if (/^(cancel|stop|nevermind)$/i.test(text.trim())) {
+      store.clearPendingAction(userId);
+      return res.json({ reply: "Cashout request cancelled." });
+    }
+
+    const details = parseCashoutBankDetails(text);
+    if (!details) {
+      return res.json({ reply: "Please send bank details like: 0123456789 Access Bank (or: bank: Access Bank, account number: 0123456789, account name: Gabriel)." });
+    }
+
+    const bankCode = await resolveBankCode(details.bankName);
+    if (!bankCode) {
+      return res.json({ reply: `I couldn't resolve bank code for '${details.bankName}'. Please send the exact bank name (e.g. Access Bank, UBA, Zenith Bank).` });
+    }
+
+    const otp = "123456";
+    const ch = createChallenge({
+      userId,
+      type: "cashout_otp",
+      expected: otp,
+      context: {
+        kind: "cashout",
+        quoteId: pending.payload.quoteId,
+        amount: pending.payload.amount,
+        token: pending.payload.token,
+        beneficiary: {
+          country: "NG",
+          bankName: details.bankName,
+          accountName: details.accountName,
+          accountNumber: details.accountNumber,
+          bankCode,
+        },
+      },
+    });
+
+    store.clearPendingAction(userId);
+    return res.json({
+      reply: `Got it ✅\n• Bank: ${details.bankName}\n• Account: ${details.accountNumber}\n• Name: ${details.accountName}\nReply with OTP 123456 to create and start the cashout.`,
+      challengeId: ch.id,
+      action: "awaiting_confirmation",
+    });
   }
 
   if (intent.kind === "show_limits") {
@@ -287,18 +374,25 @@ chatRouter.post("/message", async (req, res) => {
       }
     }
 
-    if (!beneficiary && offrampConfig.mode === "live" && offrampConfig.provider === "clova") {
-      const d = offrampConfig.defaultBeneficiary;
-      if (!d.accountName || !d.accountNumber || !d.bankCode) {
-        return res.json({ reply: "Cashout setup incomplete: set default NG beneficiary (account name, account number, bank code) in API env before running live Clova cashout." });
-      }
-    }
-
     try {
       const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: beneficiary?.country as any || "NG", currency: "NGN" });
+      const expiry = quote.expiresAt ? ` Expires: ${new Date(quote.expiresAt).toISOString()}.` : "";
+
+      if (!beneficiary) {
+        store.setPendingAction(userId, "cashout_bank_details", {
+          quoteId: quote.quoteId,
+          amount: intent.amount,
+          token: intent.token,
+        });
+        return res.json({
+          reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN.${expiry}\nSend bank details in one line: <account_number> <bank name>\nExample: 0123456789 Access Bank`,
+          quote,
+          action: "awaiting_bank_details",
+        });
+      }
+
       const otp = "123456";
       const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
-      const expiry = quote.expiresAt ? ` Expires: ${new Date(quote.expiresAt).toISOString()}.` : "";
       return res.json({ reply: `💸 Cashout quote ready: receive ${quote.receiveAmount} NGN.${expiry} Reply with OTP 123456 to confirm.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });

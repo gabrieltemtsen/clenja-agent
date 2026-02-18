@@ -72,7 +72,7 @@ type RecipientRecord = {
 
 type PendingUserAction = {
   userId: string;
-  kind: "update_recipient" | "delete_recipient";
+  kind: "update_recipient" | "delete_recipient" | "cashout_bank_details";
   payload: Record<string, string>;
   createdAt: number;
 };
