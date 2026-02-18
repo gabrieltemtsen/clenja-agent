@@ -174,6 +174,20 @@ chatRouter.post("/message", async (req, res) => {
   }
 
   if (intent.kind === "status") {
+    const asksCashoutStatus = /(cashout|payout|offramp|withdraw(?:al)?|order)/i.test(text);
+    if (asksCashoutStatus) {
+      const latestCashout = store.listReceipts(userId).filter((r) => r.kind === "cashout").slice(-1)[0];
+      if (!latestCashout) {
+        return res.json({ reply: "I couldn't find a recent cashout order. Ask: cashout status <orderId>." });
+      }
+      try {
+        const s = await offramp.status(latestCashout.ref);
+        return res.json({ reply: `Cashout ${latestCashout.ref}: ${s.status}${s.updatedAt ? ` (updated ${new Date(s.updatedAt).toISOString()})` : ""}.`, data: s });
+      } catch (e) {
+        return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+      }
+    }
+
     return res.json({ reply: "🟢 CLENJA API is online. Use /v1/readiness for full provider status." });
   }
 

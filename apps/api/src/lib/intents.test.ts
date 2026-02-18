@@ -113,3 +113,19 @@ test("parse cashout status intent", () => {
     assert.equal(i.orderId, "ord_12345");
   }
 });
+
+test("parse payout id status phrasing", () => {
+  const i = parseIntent("Payout: po_67b1233a-ded8-400f-897f-3dbbdfb90b97 status?");
+  assert.equal(i.kind, "cashout_status");
+  if (i.kind === "cashout_status") {
+    assert.equal(i.orderId, "po_67b1233a-ded8-400f-897f-3dbbdfb90b97");
+  }
+});
+
+test("parse track cashout with embedded id", () => {
+  const i = parseIntent("what is the update on my cashout order po_abc123?");
+  assert.equal(i.kind, "cashout_status");
+  if (i.kind === "cashout_status") {
+    assert.equal(i.orderId, "po_abc123");
+  }
+});
