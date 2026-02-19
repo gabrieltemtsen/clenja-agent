@@ -1,14 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
+import { ethers } from "ethers";
 import { routeIntent } from "../lib/intentRouter.js";
 import { checkPolicy, getUserPolicy, recordPolicySpend } from "../lib/policy.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
 import { makeWalletProvider } from "../adapters/provider.js";
+import { TurnkeyWalletProvider } from "../adapters/turnkey.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
 import { store } from "../lib/store.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 import { toUserFacingProviderError } from "../lib/providerErrors.js";
-import { offrampConfig } from "../lib/config.js";
+import { offrampConfig, turnkeyConfig } from "../lib/config.js";
 
 export const chatRouter = Router();
 const wallet = makeWalletProvider();
@@ -255,6 +257,40 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply, data: b });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
+    }
+  }
+
+  if (intent.kind === "drain_agent") {
+    if (!userId.startsWith("wallet:")) return res.json({ reply: "This command is only for connected wallets." });
+
+    try {
+      // Use Turnkey provider directly to inspect hidden agent wallet
+      const tk = new TurnkeyWalletProvider();
+      const b = await tk.getBalance(userId);
+      const celo = b.balances.find(x => x.token === "CELO")?.amount || "0";
+      const val = parseFloat(celo);
+
+      if (val < 0.002) return res.json({ reply: `Agent wallet is effectively empty (${val} CELO).` });
+
+      const amountToSend = (val - 0.002).toFixed(4); // Leave gas buffer
+      const to = userId.split(":")[1];
+
+      // Use main wallet provider to prepare send (delegates to Turnkey for quote)
+      const q = await wallet.prepareSend({ fromUserId: userId, token: "CELO", amount: amountToSend, to });
+      const last4 = to.slice(-4);
+
+      // Create confirmation challenge
+      const ch = createChallenge({ userId, type: "new_recipient_last4", expected: last4, context: { kind: "send", quoteId: q.quoteId, to, token: "CELO", amount: amountToSend } });
+
+      return res.json({
+        reply: `Found ${val.toFixed(4)} CELO in Agent Wallet.\nSweeping ${amountToSend} CELO to your connected wallet... Reply with ${last4} to confirm.`,
+        challengeId: ch.id,
+        action: "awaiting_confirmation"
+      });
+
+    } catch (e) {
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.drain_agent.error", status: "error", detail: { error: String(e) } });
+      return res.json({ reply: "No active Agent Wallet found to drain." });
     }
   }
 
@@ -594,3 +630,206 @@ chatRouter.get("/receipts", (req, res) => {
   if (!userId) return res.status(400).json({ error: "userId_required" });
   return res.json({ receipts: store.listReceipts(userId) });
 });
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  POST /v1/chat/build-tx
+ *
+ *  Web clients call this instead of /confirm when they want to sign
+ *  the transaction themselves (true client-side signing via wagmi).
+ *
+ *  Request:  { userId, challengeId, answer, userAddress }
+ *  Response: { steps: TxStep[] }
+ *    where TxStep = { stepId, description, to, data, value, chainId, gasLimit }
+ *
+ *  send  → 1 step  (ERC20 transfer OR native CELO transfer)
+ *  swap  → 2 steps (Mento allowance + swapIn)
+ *  cashout → not supported client-side (server-managed)
+ * ───────────────────────────────────────────────────────────────────── */
+
+const CUSD_ADDR = process.env.CUSD_TOKEN_ADDRESS || "0x765DE816845861e75A25fCA122bb6898B8B1282a";
+const CELO_ADDR = process.env.CELO_TOKEN_ADDRESS || "0x471EcE3750Da237f93B8E339c536989b8978a438";
+const CELO_CHAIN_ID_NUM = Number(process.env.CELO_CHAIN_ID || 42220);
+
+const buildTxSchema = z.object({
+  userId: z.string(),
+  challengeId: z.string(),
+  answer: z.string(),
+  userAddress: z.string(),
+});
+
+chatRouter.post("/build-tx", async (req, res) => {
+  const parsed = buildTxSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { userId, challengeId, answer, userAddress } = parsed.data;
+
+  const vr = verifyChallenge(challengeId, answer);
+  if (!vr.ok) {
+    return res.status(422).json({ error: `challenge_failed: ${vr.reason}`, steps: [] });
+  }
+
+  const ctx = vr.challenge.context as any;
+  const provider = new ethers.providers.JsonRpcProvider(turnkeyConfig.celoRpcUrl);
+
+  // ── SEND ──────────────────────────────────────────────────────────────
+  if (ctx.kind === "send") {
+    const { to, token, amount } = ctx;
+    const amountWei = ethers.utils.parseUnits(String(amount), 18);
+
+    // Balance check
+    let userBalance = ethers.BigNumber.from(0);
+    if (token === "CELO") {
+      userBalance = await provider.getBalance(userAddress);
+    } else {
+      const erc20 = new ethers.Contract(CUSD_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
+      userBalance = await erc20.balanceOf(userAddress);
+    }
+
+    if (userBalance.lt(amountWei)) {
+      return res.status(422).json({
+        error: "insufficient_funds_client",
+        steps: [],
+        details: { required: amountWei.toString(), available: userBalance.toString(), token }
+      });
+    }
+
+    if (token === "CELO") {
+      return res.json({
+        steps: [{
+          stepId: "send_native",
+          description: `Send ${amount} CELO to ${to.slice(0, 6)}...${to.slice(-4)}`,
+          to,
+          data: "0x",
+          value: amountWei.toHexString(),
+          chainId: CELO_CHAIN_ID_NUM,
+          gasLimit: 21000,
+        }],
+        context: ctx,
+      });
+    }
+
+    // cUSD ERC20 transfer
+    const iface = new ethers.utils.Interface(["function transfer(address,uint256) returns (bool)"]);
+    const data = iface.encodeFunctionData("transfer", [to, amountWei]);
+    return res.json({
+      steps: [{
+        stepId: "send_erc20",
+        description: `Send ${amount} cUSD to ${to.slice(0, 6)}...${to.slice(-4)}`,
+        to: CUSD_ADDR,
+        data,
+        value: "0x0",
+        chainId: CELO_CHAIN_ID_NUM,
+        gasLimit: 120000,
+      }],
+      context: ctx,
+    });
+  }
+
+  // ── SWAP (Mento) ──────────────────────────────────────────────────────
+  if (ctx.kind === "swap") {
+    const { fromToken, toToken, amountIn, minAmountOut } = ctx;
+    const fromAddr = fromToken === "CELO" ? CELO_ADDR : CUSD_ADDR;
+    const toAddr = toToken === "CELO" ? CELO_ADDR : CUSD_ADDR;
+    const amountInWei = ethers.utils.parseUnits(String(amountIn), 18);
+    const minOutWei = ethers.utils.parseUnits(String(minAmountOut), 18);
+
+    // Balance check
+    let userBalance = ethers.BigNumber.from(0);
+    if (fromToken === "CELO") {
+      userBalance = await provider.getBalance(userAddress);
+    } else {
+      const erc20 = new ethers.Contract(CUSD_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
+      userBalance = await erc20.balanceOf(userAddress);
+    }
+
+    if (userBalance.lt(amountInWei)) {
+      return res.status(422).json({
+        error: "insufficient_funds_client",
+        steps: [],
+        details: { required: amountInWei.toString(), available: userBalance.toString(), token: fromToken }
+      });
+    }
+
+    try {
+      const mod = await import("@mento-protocol/mento-sdk");
+      const Mento = (mod as any).Mento;
+      // const provider = new ethers.providers.JsonRpcProvider(turnkeyConfig.celoRpcUrl); // reused from above
+      const mento = await Mento.create(provider as any);
+
+      const allowanceTxObj = await (mento as any).increaseTradingAllowance(fromAddr, amountInWei);
+      const swapTxObj = await (mento as any).swapIn(fromAddr, toAddr, amountInWei, minOutWei);
+
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "client.build-tx.swap", status: "ok", detail: { fromToken, toToken, amountIn, userAddress } });
+
+      return res.json({
+        steps: [
+          {
+            stepId: "swap_allowance",
+            description: `Approve ${amountIn} ${fromToken} for Mento`,
+            to: allowanceTxObj.to || fromAddr,
+            data: allowanceTxObj.data || "0x",
+            value: "0x0",
+            chainId: CELO_CHAIN_ID_NUM,
+            gasLimit: 200000,
+          },
+          {
+            stepId: "swap_execute",
+            description: `Swap ${amountIn} ${fromToken} → ${toToken} via Mento`,
+            to: swapTxObj.to,
+            data: swapTxObj.data || "0x",
+            value: "0x0",
+            chainId: CELO_CHAIN_ID_NUM,
+            gasLimit: 300000,
+          },
+        ],
+        context: ctx,
+      });
+    } catch (e: any) {
+      // Fallback: return ERC20 approve to Mento broker
+      const MENTO_BROKER = "0x777A8B7db05f97c8Be5E2e7B4A75b4aC3Ab5CAcB";
+      const approveIface = new ethers.utils.Interface(["function approve(address,uint256) returns (bool)"]);
+      const approveData = approveIface.encodeFunctionData("approve", [MENTO_BROKER, amountInWei]);
+      return res.json({
+        steps: [{
+          stepId: "swap_approve_fallback",
+          description: `Approve ${amountIn} ${fromToken} for swap`,
+          to: fromAddr,
+          data: approveData,
+          value: "0x0",
+          chainId: CELO_CHAIN_ID_NUM,
+          gasLimit: 200000,
+        }],
+        context: ctx,
+        warning: "swap_sdk_fallback",
+      });
+    }
+  }
+
+  return res.status(422).json({ error: "build_tx_unsupported", steps: [] });
+});
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  POST /v1/chat/record-tx
+ *
+ *  After the user broadcasts the tx via their wallet, frontend calls
+ *  this to persist the receipt for history and audit.
+ * ───────────────────────────────────────────────────────────────────── */
+const recordTxSchema = z.object({
+  userId: z.string(),
+  kind: z.enum(["send", "swap"]),
+  txHash: z.string(),
+  amount: z.string(),
+  token: z.string(),
+});
+
+chatRouter.post("/record-tx", (req, res) => {
+  const parsed = recordTxSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { userId, kind, txHash, amount, token } = parsed.data;
+
+  store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind, amount, token, ref: txHash, createdAt: Date.now() });
+  recordPolicySpend(userId, Number(amount));
+  store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "client.record-tx", status: "ok", detail: { kind, txHash, amount, token } });
+
+  return res.json({ ok: true, txHash, txUrl: `https://celoscan.io/tx/${txHash}` });
+});
+

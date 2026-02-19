@@ -185,7 +185,37 @@ async function getOrCreateWallet(userId: string): Promise<{ address: string; wal
   }
 }
 
+export async function getWalletOnly(userId: string) {
+  const cached = store.getWallet(userId, "turnkey");
+  if (cached?.walletAddress && cached?.meta?.walletId) {
+    return { address: cached.walletAddress, walletId: cached.meta.walletId };
+  }
+
+  const c = client();
+  const walletName = mkWalletName(userId);
+
+  try {
+    const wallets = await c.getWallets();
+    const found = (wallets as any)?.wallets?.find((w: any) => String(w?.walletName || "") === walletName);
+    const walletId = String(found?.walletId || "");
+    if (!walletId) return null;
+
+    const accounts = await c.getWalletAccounts({ walletId, includeWalletDetails: false });
+    const address = String((accounts as any)?.accounts?.[0]?.address || "");
+    if (!address) return null;
+
+    store.upsertWallet({ userId, provider: "turnkey", walletAddress: address, meta: { walletId }, createdAt: Date.now(), updatedAt: Date.now() });
+    return { address, walletId };
+  } catch (e) {
+    return null;
+  }
+}
+
 export class TurnkeyWalletProvider implements WalletProvider {
+  async getWalletOnly(userId: string) {
+    return getWalletOnly(userId);
+  }
+
   async createOrLinkUserWallet(userId: string) {
     const ok = assertConfig();
     if (!ok) {

@@ -1,0 +1,689 @@
+{
+  "challenges": {
+    "ch_676115bf-0a4b-4ad7-833a-45548ece3fd1": {
+      "id": "ch_676115bf-0a4b-4ad7-833a-45548ece3fd1",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "1532",
+      "status": "verified",
+      "createdAt": 1771506024132,
+      "expiresAt": 1771506324132,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_7169f36a-f1ff-48cb-8a5e-0897fbde026c",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "minAmountOut": "0.15164367949080414"
+      }
+    },
+    "ch_86e843aa-b57f-4c5e-8683-8d1664cfc5cd": {
+      "id": "ch_86e843aa-b57f-4c5e-8683-8d1664cfc5cd",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "1530",
+      "status": "verified",
+      "createdAt": 1771506199861,
+      "expiresAt": 1771506499861,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_76131d5f-b8d3-4371-8ddf-c77452c5897e",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "minAmountOut": "0.151425732745544205"
+      }
+    },
+    "ch_c9bca6b9-dedd-43e5-aab2-727652670862": {
+      "id": "ch_c9bca6b9-dedd-43e5-aab2-727652670862",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "1518",
+      "status": "verified",
+      "createdAt": 1771506566786,
+      "expiresAt": 1771506866786,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_2bcd2905-a331-4781-a747-8270c1b1d898",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "minAmountOut": "0.150233651938122452"
+      }
+    },
+    "ch_5356a458-a0a5-42c8-bc1a-24c2d82fcb14": {
+      "id": "ch_5356a458-a0a5-42c8-bc1a-24c2d82fcb14",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "1517",
+      "status": "verified",
+      "createdAt": 1771507187608,
+      "expiresAt": 1771507487608,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_5f4a9519-64f9-41f7-9bc8-8999571f4c86",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "minAmountOut": "0.150180823081561157"
+      }
+    },
+    "ch_25f3922c-6650-4053-8d43-5aec16a1abc2": {
+      "id": "ch_25f3922c-6650-4053-8d43-5aec16a1abc2",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "1517",
+      "status": "verified",
+      "createdAt": 1771507347341,
+      "expiresAt": 1771507647341,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_354b248f-f951-4d07-9a39-0fbe3e7a3fe8",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "minAmountOut": "0.150180823081561157"
+      }
+    },
+    "ch_03357da4-a8db-4fd7-9219-879b8bdc129c": {
+      "id": "ch_03357da4-a8db-4fd7-9219-879b8bdc129c",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "e17c",
+      "status": "verified",
+      "createdAt": 1771507848159,
+      "expiresAt": 1771508148159,
+      "context": {
+        "kind": "send",
+        "quoteId": "q_e9776d70-5e67-4c44-b627-97970ccceb37",
+        "to": "0xC5337CeE97fF5B190F26C4A12341dd210f26e17c",
+        "token": "CELO",
+        "amount": "3"
+      }
+    },
+    "ch_60536e38-2f47-42eb-8ff6-fa3b2a273ad2": {
+      "id": "ch_60536e38-2f47-42eb-8ff6-fa3b2a273ad2",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "0227",
+      "status": "verified",
+      "createdAt": 1771507907156,
+      "expiresAt": 1771508207156,
+      "context": {
+        "kind": "swap",
+        "quoteId": "swap_30eecc5f-5444-4287-94e8-8903bc1f3186",
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "0.3",
+        "minAmountOut": "0.022472708501758817"
+      }
+    },
+    "ch_3ab02425-ab56-4ea6-80e3-3c9410919a6b": {
+      "id": "ch_3ab02425-ab56-4ea6-80e3-3c9410919a6b",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "cashout_otp",
+      "expected": "123456",
+      "status": "verified",
+      "createdAt": 1771508010901,
+      "expiresAt": 1771508310901,
+      "context": {
+        "kind": "cashout",
+        "quoteId": "q_73b28319-8ad3-406c-a175-0b706ffa10bc",
+        "amount": "0.05",
+        "token": "cUSD",
+        "beneficiary": {
+          "country": "NG",
+          "bankName": "opay",
+          "accountName": "GABRIEL NAAZAM TEMTSEN",
+          "accountNumber": "9052390212",
+          "bankCode": "999992"
+        }
+      }
+    },
+    "ch_208889a9-334b-4294-ae09-14d48ed75bed": {
+      "id": "ch_208889a9-334b-4294-ae09-14d48ed75bed",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "type": "new_recipient_last4",
+      "expected": "e17c",
+      "status": "verified",
+      "createdAt": 1771509197711,
+      "expiresAt": 1771509497711,
+      "context": {
+        "kind": "send",
+        "quoteId": "q_12541af5-06cd-4457-92a3-b2dd3db3c744",
+        "to": "0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+        "token": "CELO",
+        "amount": "2.9972"
+      }
+    }
+  },
+  "policySpent": {
+    "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c:2026-02-19": 3.0471999999999997
+  },
+  "receipts": [
+    {
+      "id": "rcpt_1771509212443",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "send",
+      "amount": "2.9972",
+      "token": "CELO",
+      "ref": "0x3d5437bba85fa7fd7be7078568e3875aa1695f28adcbc539636207c8616ca73d",
+      "createdAt": 1771509212443
+    },
+    {
+      "id": "rcpt_1771508026369",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "cashout",
+      "amount": "0.05",
+      "token": "cUSD",
+      "ref": "ord_d8bd12bf-c54e-448e-80ad-25bbb5a0b49b",
+      "createdAt": 1771508026369
+    },
+    {
+      "id": "rcpt_1771507945179",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "swap",
+      "amount": "0",
+      "token": "CELO",
+      "ref": "0xa457028528e60f9286e80c3a2ecaf7f9b896eae700c38d82264311b780221681",
+      "createdAt": 1771507945180
+    },
+    {
+      "id": "rcpt_1771507936491",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "swap",
+      "amount": "0",
+      "token": "CELO",
+      "ref": "0x3dfe41c7b836cba9a6efb554974b5867526d53d40bcc43130016118213965f53",
+      "createdAt": 1771507936491
+    },
+    {
+      "id": "rcpt_1771506592270",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "swap",
+      "amount": "0",
+      "token": "CELO",
+      "ref": "0x05ffe07c0bae715802ccee29d29426beca9b06669558051c334a304b962d3d61",
+      "createdAt": 1771506592271
+    },
+    {
+      "id": "rcpt_1771506502285",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "swap",
+      "amount": "0",
+      "token": "CELO",
+      "ref": "0xd17fdb92ae5a9635c8abc8834fb17acd21489e4826fc9ed6e4db0b4a82d1c7fd",
+      "createdAt": 1771506502285
+    },
+    {
+      "id": "rcpt_1771506221558",
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "kind": "swap",
+      "amount": "0",
+      "token": "CELO",
+      "ref": "0x07d4000c1b54a49c8acf2eb16ba622b5d79d05ca3a61f7f034575005ebd1440f",
+      "createdAt": 1771506221558
+    }
+  ],
+  "beneficiaries": [],
+  "cashouts": [],
+  "audit": [
+    {
+      "id": "aud_1771509212444",
+      "ts": 1771509212444,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.send.execute",
+      "status": "ok",
+      "detail": {
+        "txHash": "0x3d5437bba85fa7fd7be7078568e3875aa1695f28adcbc539636207c8616ca73d"
+      }
+    },
+    {
+      "id": "aud_1771509212441",
+      "ts": 1771509212441,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.executeSend",
+      "status": "ok",
+      "detail": {
+        "txHash": "0x3d5437bba85fa7fd7be7078568e3875aa1695f28adcbc539636207c8616ca73d"
+      }
+    },
+    {
+      "id": "aud_1771509212439",
+      "ts": 1771509212439,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.turnkey.sendTransaction",
+      "status": "ok",
+      "detail": {
+        "txHash": "0x3d5437bba85fa7fd7be7078568e3875aa1695f28adcbc539636207c8616ca73d",
+        "walletId": "acf22692-2988-5517-9103-612f50073749"
+      }
+    },
+    {
+      "id": "aud_1771509196981",
+      "ts": 1771509196981,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "drain agent wallet",
+        "intent": "drain_agent",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771508134614",
+      "ts": 1771508134614,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.cashout.execute",
+      "status": "ok",
+      "detail": {
+        "payoutId": "ord_d8bd12bf-c54e-448e-80ad-25bbb5a0b49b",
+        "status": "awaiting_deposit",
+        "depositTxHash": "0x8f7b5bab2e791ca9e68f7a87d979465342fe7a701cb028acbcbaf5ca9223e516",
+        "watcherStatus": "watcher_notify_failed"
+      }
+    },
+    {
+      "id": "aud_1771508029351",
+      "ts": 1771508029351,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.executeSend",
+      "status": "ok",
+      "detail": {
+        "txHash": "0x8f7b5bab2e791ca9e68f7a87d979465342fe7a701cb028acbcbaf5ca9223e516"
+      }
+    },
+    {
+      "id": "aud_1771508029350",
+      "ts": 1771508029350,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.turnkey.sendTransaction",
+      "status": "ok",
+      "detail": {
+        "txHash": "0x8f7b5bab2e791ca9e68f7a87d979465342fe7a701cb028acbcbaf5ca9223e516",
+        "walletId": "acf22692-2988-5517-9103-612f50073749"
+      }
+    },
+    {
+      "id": "aud_1771508009075",
+      "ts": 1771508009075,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "9052390212 opay",
+        "intent": "unknown",
+        "parser": "llm"
+      }
+    },
+    {
+      "id": "aud_1771507991336",
+      "ts": 1771507991336,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "9052390212",
+        "intent": "unknown",
+        "parser": "llm"
+      }
+    },
+    {
+      "id": "aud_1771507978258",
+      "ts": 1771507978258,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "cashout 0.05 cusd",
+        "intent": "cashout",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771507945182",
+      "ts": 1771507945182,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.record-tx",
+      "status": "ok",
+      "detail": {
+        "kind": "swap",
+        "txHash": "0xa457028528e60f9286e80c3a2ecaf7f9b896eae700c38d82264311b780221681",
+        "amount": "0",
+        "token": "CELO"
+      }
+    },
+    {
+      "id": "aud_1771507936494",
+      "ts": 1771507936494,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.record-tx",
+      "status": "ok",
+      "detail": {
+        "kind": "swap",
+        "txHash": "0x3dfe41c7b836cba9a6efb554974b5867526d53d40bcc43130016118213965f53",
+        "amount": "0",
+        "token": "CELO"
+      }
+    },
+    {
+      "id": "aud_1771507922774",
+      "ts": 1771507922774,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.build-tx.swap",
+      "status": "ok",
+      "detail": {
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "0.3",
+        "userAddress": "0xC5337CeE97fF5B190F26C4A12341dd210f26e17c"
+      }
+    },
+    {
+      "id": "aud_1771507904972",
+      "ts": 1771507904972,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "convert 0.3 celo to cusd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771507870710",
+      "ts": 1771507870710,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.confirm",
+      "status": "error",
+      "detail": {
+        "reason": "not_pending"
+      }
+    },
+    {
+      "id": "aud_1771507848157",
+      "ts": 1771507848157,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "send 3 celo to 0xC5337CeE97fF5B190F26C4A12341dd210f26e17c",
+        "intent": "send",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771507356459",
+      "ts": 1771507356459,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.confirm",
+      "status": "error",
+      "detail": {
+        "reason": "not_pending"
+      }
+    },
+    {
+      "id": "aud_1771507345165",
+      "ts": 1771507345165,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "convert 2 celo to cusd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771507211282",
+      "ts": 1771507211282,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "Use Agent Wallet",
+        "intent": "unknown",
+        "parser": "llm"
+      }
+    },
+    {
+      "id": "aud_1771507185331",
+      "ts": 1771507185331,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "convert 2 celo to cusd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771506592273",
+      "ts": 1771506592273,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.record-tx",
+      "status": "ok",
+      "detail": {
+        "kind": "swap",
+        "txHash": "0x05ffe07c0bae715802ccee29d29426beca9b06669558051c334a304b962d3d61",
+        "amount": "0",
+        "token": "CELO"
+      }
+    },
+    {
+      "id": "aud_1771506582115",
+      "ts": 1771506582115,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.build-tx.swap",
+      "status": "ok",
+      "detail": {
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "userAddress": "0xC5337CeE97fF5B190F26C4A12341dd210f26e17c"
+      }
+    },
+    {
+      "id": "aud_1771506564467",
+      "ts": 1771506564467,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "swap 2 celo to cUsd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771506546343",
+      "ts": 1771506546343,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.balance",
+      "status": "ok"
+    },
+    {
+      "id": "aud_1771506545672",
+      "ts": 1771506545672,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "What's my balance?",
+        "intent": "balance",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771506502287",
+      "ts": 1771506502287,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.record-tx",
+      "status": "ok",
+      "detail": {
+        "kind": "swap",
+        "txHash": "0xd17fdb92ae5a9635c8abc8834fb17acd21489e4826fc9ed6e4db0b4a82d1c7fd",
+        "amount": "0",
+        "token": "CELO"
+      }
+    },
+    {
+      "id": "aud_1771506221560",
+      "ts": 1771506221560,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.record-tx",
+      "status": "ok",
+      "detail": {
+        "kind": "swap",
+        "txHash": "0x07d4000c1b54a49c8acf2eb16ba622b5d79d05ca3a61f7f034575005ebd1440f",
+        "amount": "0",
+        "token": "CELO"
+      }
+    },
+    {
+      "id": "aud_1771506210773",
+      "ts": 1771506210773,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.build-tx.swap",
+      "status": "ok",
+      "detail": {
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "userAddress": "0xC5337CeE97fF5B190F26C4A12341dd210f26e17c"
+      }
+    },
+    {
+      "id": "aud_1771506197971",
+      "ts": 1771506197971,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "convert 2 celo to cusd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771506187063",
+      "ts": 1771506187063,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.balance",
+      "status": "ok"
+    },
+    {
+      "id": "aud_1771506185684",
+      "ts": 1771506185684,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "What's my balance?",
+        "intent": "balance",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771506035921",
+      "ts": 1771506035921,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "client.build-tx.swap",
+      "status": "ok",
+      "detail": {
+        "fromToken": "CELO",
+        "toToken": "cUSD",
+        "amountIn": "2",
+        "userAddress": "0xC5337CeE97fF5B190F26C4A12341dd210f26e17c"
+      }
+    },
+    {
+      "id": "aud_1771506021973",
+      "ts": 1771506021973,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "convert 2 celo to Cusd",
+        "intent": "swap",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771505999063",
+      "ts": 1771505999063,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.balance",
+      "status": "ok"
+    },
+    {
+      "id": "aud_1771505998214",
+      "ts": 1771505998214,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "whats my balance",
+        "intent": "balance",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771505925124",
+      "ts": 1771505925124,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.createOrLink",
+      "status": "ok"
+    },
+    {
+      "id": "aud_1771505925122",
+      "ts": 1771505925122,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "whats my address",
+        "intent": "address",
+        "parser": "regex"
+      }
+    },
+    {
+      "id": "aud_1771505900819",
+      "ts": 1771505900819,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "goat.wallet.balance",
+      "status": "ok"
+    },
+    {
+      "id": "aud_1771505898546",
+      "ts": 1771505898546,
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "action": "chat.message",
+      "status": "ok",
+      "detail": {
+        "text": "What's my balance?",
+        "intent": "balance",
+        "parser": "regex"
+      }
+    }
+  ],
+  "idempotency": [],
+  "wallets": [
+    {
+      "userId": "wallet:0xc5337cee97ff5b190f26c4a12341dd210f26e17c",
+      "provider": "turnkey",
+      "walletAddress": "0x90f003734238357eb4A7cec9f5e1Dd8244FC7311",
+      "meta": {
+        "walletId": "acf22692-2988-5517-9103-612f50073749"
+      },
+      "createdAt": 1771505900061,
+      "updatedAt": 1771505900061
+    }
+  ],
+  "recipients": [],
+  "pendingActions": [],
+  "userPolicies": []
+}

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { walletRouter } from "./routes/wallet.js";
 import { offrampRouter } from "./routes/offramp.js";
 import { chatRouter } from "./routes/chat.js";
@@ -9,6 +10,7 @@ import { readinessRouter } from "./routes/readiness.js";
 import { auditRouter } from "./routes/audit.js";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "@clenja/api" }));
