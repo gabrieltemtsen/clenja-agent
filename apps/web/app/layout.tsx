@@ -1,9 +1,10 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "CLENJA — Agentic Finance on Celo",
-  description: "Telegram-first agentic finance assistant with wallet operations, cashout orchestration, and x402-paid APIs on Celo.",
+  description: "AI-powered agentic finance assistant with wallet operations, cashout orchestration, and onchain actions on Celo.",
   icons: { icon: "/favicon.ico" },
 };
 
@@ -15,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
-        <LayoutShell>{children}</LayoutShell>
+        <Providers>
+          <LayoutShell>{children}</LayoutShell>
+        </Providers>
       </body>
     </html>
   );

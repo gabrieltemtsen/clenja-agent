@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { WalletButton } from "./WalletButton";
 
 /* ── SVG Icons (inline to avoid dependencies) ────── */
 export function IconDashboard() {
@@ -187,7 +188,8 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-badge">
+        <WalletButton />
+        <div className="sidebar-badge" style={{ marginTop: 10 }}>
           <span className="sidebar-badge-dot" />
           Celo Mainnet
         </div>
@@ -208,9 +210,12 @@ export function MobileNav() {
           <div className="sidebar-logo-icon" style={{ width: 30, height: 30, fontSize: 13 }}>C</div>
           <span style={{ fontWeight: 800, fontSize: 18, letterSpacing: -0.5 }}>CLENJA</span>
         </div>
-        <div className="sidebar-badge" style={{ fontSize: 10 }}>
-          <span className="sidebar-badge-dot" />
-          Celo
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="sidebar-badge" style={{ fontSize: 10 }}>
+            <span className="sidebar-badge-dot" />
+            Celo
+          </div>
+          <WalletButton />
         </div>
       </header>
       <nav className="mobile-nav">

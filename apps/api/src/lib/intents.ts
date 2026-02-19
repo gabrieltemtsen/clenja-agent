@@ -21,6 +21,7 @@ export type Intent =
   | { kind: "send_to_recipient"; amount: string; token: "cUSD" | "CELO"; recipientName: string }
   | { kind: "cashout"; amount: string; token: "cUSD" | "CELO"; beneficiaryName?: string }
   | { kind: "cashout_status"; orderId: string }
+  | { kind: "drain_agent" }
   | { kind: "unknown"; raw: string };
 
 const sendRegex = /(send|transfer)\s+(\d+(?:\.\d+)?)\s*(cusd|celo)\s+(?:to\s+)?(?:this\s+address\s*:?\s*)?(0x[a-fA-F0-9]{40})/i;
@@ -106,6 +107,8 @@ export function parseIntent(text: string): Intent {
   if (co) {
     return { kind: "cashout", amount: co[1], token: normalizeToken(co[2]), beneficiaryName: co[3]?.trim() };
   }
+
+  if (/drain|empty agent wallet|withdraw agent funds/i.test(c)) return { kind: "drain_agent" };
 
   return { kind: "unknown", raw: t };
 }
