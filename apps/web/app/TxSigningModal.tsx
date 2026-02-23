@@ -35,6 +35,7 @@ export function TxSigningModal({ userId, steps, onComplete, onCancel }: TxSignin
     const { isLoading: isConfirming, isSuccess: isConfirmed, isError: isConfirmError, error: confirmError } = useWaitForTransactionReceipt({
         hash: currentHash,
     });
+    //learning that recent sgning is using i diferent technologyß
 
     useEffect(() => {
         if (isConfirmed && currentHash) {
