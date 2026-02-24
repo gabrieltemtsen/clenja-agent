@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
 import { LiveOfframpProvider } from "../adapters/offramp.js";
-import { pricing } from "../lib/config.js";
+import { pricing, routeDescriptions } from "../lib/config.js";
 import { store } from "../lib/store.js";
 
 export const offrampRouter = Router();
@@ -16,7 +16,7 @@ const quoteSchema = z.object({
   currency: z.enum(["NGN", "KES", "GHS", "ZAR"]),
 });
 
-offrampRouter.post("/quote", requireX402(pricing.offrampQuote), async (req, res) => {
+offrampRouter.post("/quote", requireX402(pricing.offrampQuote, { description: routeDescriptions.offrampQuote }), async (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -38,7 +38,7 @@ const createSchema = z.object({
   otp: z.string().min(4),
 });
 
-offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, res) => {
+offrampRouter.post("/create", requireX402(pricing.offrampCreate, { description: routeDescriptions.offrampCreate, maxTimeoutSeconds: 30 }), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -83,14 +83,14 @@ offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, re
   return res.json(response);
 });
 
-offrampRouter.get("/status/:payoutId", requireX402(pricing.offrampQuote), async (req, res) => {
+offrampRouter.get("/status/:payoutId", requireX402(pricing.offrampStatus, { description: routeDescriptions.offrampStatus }), async (req, res) => {
   const payoutId = req.params.payoutId;
   const order = store.getCashout(payoutId);
   if (!order) return res.status(404).json({ error: "not_found" });
   return res.json({ payoutId: order.payoutId, status: order.status, updatedAt: order.updatedAt });
 });
 
-offrampRouter.post("/status/:payoutId", requireX402(pricing.offrampCreate), async (req, res) => {
+offrampRouter.post("/status/:payoutId", requireX402(pricing.offrampCreate, { description: routeDescriptions.offrampStatus }), async (req, res) => {
   const payoutId = req.params.payoutId;
   const status = String(req.body?.status || "");
   if (!["pending", "processing", "settled", "failed"].includes(status)) {

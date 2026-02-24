@@ -14,6 +14,9 @@ CLENJA unifies these into one conversational interface and API layer. Users can 
 
 ## What we built
 - Telegram-first conversational agent UX
+- Web-based "Bring Your Own Wallet" flow via WalletConnect
+- Client-side transaction signing (MetaMask/MetaMask Mobile) for web users
+- Hybrid Wallet Provider logic (Connected EOA as primary identity, Server Wallet as fallback)
 - Intent routing + confirmation challenge flow (`/v1/chat/message`, `/v1/chat/confirm`)
 - Live custodial wallet execution (Turnkey) on Celo
 - Balance + send flows with receipt tracking
@@ -29,12 +32,14 @@ Celo is ideal for real-world agentic payments: low fees, fast confirmations, and
 ## Infra Story
 CLENJA is built as reusable agent infra:
 - Payment-gated API endpoints via x402
-- Adapter-based architecture (wallet/offramp provider abstraction)
+- Adapter-based architecture (Hybrid Wallet Provider for EOA + Custodial abstraction)
 - Policy + audit primitives suitable for multi-agent orchestration
 
 ## Security and Trust
 - Explicit confirmation challenges before high-impact actions
-- Policy/risk controls and action gating
+- Client-side signing option to keep private keys off the server for web users
+- Action-gated policy/risk controls
+- Drain command to sweep funds from custodial agent wallets to user EOA
 - Persistent receipts + audit trail
 - Improved swap reliability: allowance handling + onchain receipt status verification before success response
 

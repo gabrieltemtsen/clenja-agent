@@ -3,13 +3,13 @@ import { z } from "zod";
 import { requireX402 } from "../middleware/x402.js";
 import { makeWalletProvider } from "../adapters/provider.js";
 import { createChallenge, verifyChallenge } from "../lib/stateMachine.js";
-import { pricing } from "../lib/config.js";
+import { pricing, routeDescriptions } from "../lib/config.js";
 import { store } from "../lib/store.js";
 
 export const walletRouter = Router();
 const wallet = makeWalletProvider();
 
-walletRouter.get("/balance", requireX402(pricing.walletBalance), async (req, res) => {
+walletRouter.get("/balance", requireX402(pricing.walletBalance, { description: routeDescriptions.walletBalance }), async (req, res) => {
   const userId = String(req.query.userId || "tg:demo");
   const snapshot = await wallet.getBalance(userId);
   return res.json({ ...snapshot, paymentReceiptId: res.getHeader("x-payment-receipt-id") });
@@ -22,7 +22,7 @@ const prepareSchema = z.object({
   to: z.string(),
 });
 
-walletRouter.post("/send/prepare", requireX402(pricing.walletSendPrepare), async (req, res) => {
+walletRouter.post("/send/prepare", requireX402(pricing.walletSendPrepare, { description: routeDescriptions.walletSendPrepare }), async (req, res) => {
   const parsed = prepareSchema.safeParse(req.body);
   if (!parsed.success) {
     store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), action: "wallet.send.prepare", status: "error", detail: { reason: "validation_error" } });
@@ -59,7 +59,7 @@ const confirmSchema = z.object({
   answer: z.string(),
 });
 
-walletRouter.post("/send/confirm", requireX402(pricing.walletSendConfirm), async (req, res) => {
+walletRouter.post("/send/confirm", requireX402(pricing.walletSendConfirm, { description: routeDescriptions.walletSendConfirm }), async (req, res) => {
   const parsed = confirmSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
