@@ -8,6 +8,7 @@ import { beneficiariesRouter } from "./routes/beneficiaries.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { readinessRouter } from "./routes/readiness.js";
 import { auditRouter } from "./routes/audit.js";
+import { x402Router } from "./routes/x402.js";
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,7 @@ app.use("/v1/offramp", offrampRouter);
 app.use("/v1/chat", chatRouter);
 app.use("/v1/beneficiaries", beneficiariesRouter);
 app.use("/v1/dashboard", dashboardRouter);
+app.use("/v1/x402", x402Router);
 
 const port = Number(process.env.PORT || 8080);
 app.listen(port, () => {
