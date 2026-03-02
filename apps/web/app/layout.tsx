@@ -14,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta name="theme-color" content="#060B18" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="talentapp:project_verification" content="5e9e77e53337a5b5f788a3df9a55716dba2a12c29d5f4ebf08e25cf0469e4fe591615004df9fd1139d2509e244341c5f7a3899c07b580f3c3d493a8091ee603c" />
       </head>
       <body>
         <Providers>
