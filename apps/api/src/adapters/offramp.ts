@@ -82,9 +82,10 @@ async function offrampRequest(path: string, method: "POST" | "GET", body?: unkno
 
 const clovaQuoteCache = new Map<string, { amountCrypto: string; asset: "cUSD_CELO" | "USDC_BASE" | "USDCX_STACKS"; createdAt: number }>();
 
-function mapTokenToAsset(token: "cUSD" | "CELO") {
+function mapTokenToAsset(token: "cUSD" | "CELO" | "USDC") {
   if (token === "cUSD") return "cUSD_CELO" as const;
-  // Keep explicit UX: CELO direct cashout not supported yet in clova path.
+  if (token === "USDC") return "USDC_BASE" as const;
+  // CELO direct cashout not supported via Paycrest yet.
   throw new Error("cashout_token_not_supported_live:CELO");
 }
 
@@ -106,12 +107,23 @@ export class MockOfframpProvider implements OfframpProvider {
   }
 
   async listBanks(_: string) {
+    // Paycrest uses SWIFT/BIC-style institution codes (not legacy numeric codes)
     return [
-      { name: "Access Bank", code: "044" },
-      { name: "GTBank", code: "058" },
-      { name: "First Bank", code: "011" },
-      { name: "UBA", code: "033" },
-      { name: "Zenith Bank", code: "057" },
+      { name: "Access Bank", code: "ABNGNGLA" },
+      { name: "Guaranty Trust Bank", code: "GTBINGLA" },
+      { name: "United Bank for Africa", code: "UNAFNGLA" },
+      { name: "Zenith Bank", code: "ZEIBNGLA" },
+      { name: "First Bank Of Nigeria", code: "FBNINGLA" },
+      { name: "OPay", code: "OPAYNGPC" },
+      { name: "Kuda Microfinance Bank", code: "KUDANGPC" },
+      { name: "PalmPay", code: "PALMNGPC" },
+      { name: "Moniepoint MFB", code: "MONINGPC" },
+      { name: "Wema Bank", code: "WEMANGLA" },
+      { name: "Sterling Bank", code: "NAMENGLA" },
+      { name: "FCMB", code: "FCMBNGLA" },
+      { name: "Fidelity Bank", code: "FIDTNGLA" },
+      { name: "Stanbic IBTC Bank", code: "SBICNGLA" },
+      { name: "Union Bank", code: "UBNINGLA" },
     ];
   }
 
@@ -210,9 +222,16 @@ export class LiveOfframpProvider implements OfframpProvider {
     if (offrampConfig.mode !== "live") return this.fallback.listBanks(country);
     if (offrampConfig.provider === "clova") {
       try {
-        const data = await offrampRequest(`/v1/banks?country=${encodeURIComponent(country)}`, "GET");
-        const banks = Array.isArray(data?.banks) ? data.banks : [];
-        return banks.map((b: any) => ({ name: String(b.name || ""), code: String(b.code || "") })).filter((b: any) => b.name && b.code);
+        // clova-pay-africa uses Paycrest — query by currency, not country code
+        // Map country code to currency (currently only NGN supported)
+        const currencyMap: Record<string, string> = { NG: "NGN", KE: "KES", GH: "GHS", ZA: "ZAR" };
+        const currency = currencyMap[country.toUpperCase()] || "NGN";
+        const data = await offrampRequest(`/v1/banks?currency=${encodeURIComponent(currency)}`, "GET");
+        // clova-pay-africa returns { currency, institutions: [{name, code}] }
+        const institutions = Array.isArray(data?.institutions) ? data.institutions : [];
+        return institutions
+          .map((b: any) => ({ name: String(b.name || ""), code: String(b.code || "") }))
+          .filter((b: any) => b.name && b.code);
       } catch {
         return this.fallback.listBanks(country);
       }
@@ -244,7 +263,7 @@ export class LiveOfframpProvider implements OfframpProvider {
         rate: String(data.rate || "0"),
         fee: String(data.feeNgn || data.fee || "0"),
         receiveAmount: String(data.receiveNgn || data.receiveAmount || "0"),
-        eta: "Paystack payout after deposit confirmation",
+        eta: "Paycrest payout after deposit confirmation",
         expiresAt: Number(data.expiresAt || Date.now() + 5 * 60 * 1000),
       };
     }
