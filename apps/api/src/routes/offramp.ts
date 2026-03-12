@@ -10,7 +10,7 @@ const provider = new LiveOfframpProvider();
 
 const quoteSchema = z.object({
   userId: z.string(),
-  fromToken: z.enum(["cUSD", "CELO"]),
+  fromToken: z.enum(["cUSD", "CELO", "USDC"]),
   amount: z.string(),
   country: z.enum(["NG", "KE", "GH", "ZA"]),
   currency: z.enum(["NGN", "KES", "GHS", "ZAR"]),
@@ -32,6 +32,8 @@ const createSchema = z.object({
   beneficiary: z.object({
     country: z.string(),
     bankName: z.string(),
+    // Paycrest institution code (e.g. "ABNGNGLA" for Access Bank)
+    bankCode: z.string().min(3),
     accountName: z.string(),
     accountNumber: z.string(),
   }).optional(),
@@ -54,11 +56,16 @@ offrampRouter.post("/create", requireX402(pricing.offrampCreate), async (req, re
   if (!beneficiary && payload.beneficiaryId) {
     const found = store.listBeneficiaries(payload.userId).find((b) => b.id === payload.beneficiaryId);
     if (!found) return res.status(400).json({ error: "beneficiary_not_found" });
+    // Use real account number (stored) for Paycrest; masked version is display-only
+    const realAccountNumber = (found as any).accountNumber || found.accountNumberMasked;
+    const bankCode = (found as any).bankCode || "";
+    if (!bankCode) return res.status(400).json({ error: "beneficiary_bank_code_missing", hint: "Re-add this beneficiary to include a Paycrest bank code" });
     beneficiary = {
       country: found.country,
       bankName: found.bankName,
+      bankCode,
       accountName: found.accountName,
-      accountNumber: found.accountNumberMasked,
+      accountNumber: realAccountNumber,
     };
   }
 

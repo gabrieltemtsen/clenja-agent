@@ -16,6 +16,8 @@ const createSchema = z.object({
   userId: z.string(),
   country: z.string(),
   bankName: z.string(),
+  // Paycrest institution code (e.g. "ABNGNGLA" for Access Bank, "GTBINGLA" for GTBank)
+  bankCode: z.string().min(3),
   accountName: z.string(),
   accountNumber: z.string().min(6),
 });
@@ -24,7 +26,7 @@ beneficiariesRouter.post("/", (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return fail(res, "validation_error", "Invalid beneficiary payload", 400, parsed.error.flatten());
 
-  const { userId, country, bankName, accountName, accountNumber } = parsed.data;
+  const { userId, country, bankName, bankCode, accountName, accountNumber } = parsed.data;
   const last4 = accountNumber.slice(-4);
   const masked = `${"*".repeat(Math.max(0, accountNumber.length - 4))}${last4}`;
 
@@ -33,12 +35,17 @@ beneficiariesRouter.post("/", (req, res) => {
     userId,
     country,
     bankName,
+    bankCode,
     accountName,
+    // Store real account number for Paycrest order creation — masked version for display only
+    accountNumber,
     accountNumberMasked: masked,
     accountNumberLast4: last4,
     createdAt: Date.now(),
   };
 
   store.addBeneficiary(b);
-  return ok(res, { beneficiary: b });
+  // Return masked version in response for security
+  const { accountNumber: _hidden, ...publicB } = b;
+  return ok(res, { beneficiary: publicB });
 });
