@@ -22,20 +22,48 @@ function fuzzyIncludes(a: string, b: string) {
   return aa.includes(bb) || bb.includes(aa);
 }
 
-async function resolveBankCode(bankName: string, country = "NG") {
-  // Special case: M-Pesa is always code "MPS"
-  const bankLower = bankName.toLowerCase();
-  if (/mpesa|m-pesa|m pesa/.test(bankLower)) return "MPS";
+// Mobile money institution codes from Paycrest (verified live)
+const MOBILE_MONEY_CODES: Record<string, string> = {
+  // Kenya
+  "mpesa": "SAFAKEPC", "m-pesa": "SAFAKEPC", "safaricom": "SAFAKEPC",
+  "airtel kenya": "AIRTKEPC",
+  // Ghana
+  "mtn": "MOMOGHPC", "mtn mobile money": "MOMOGHPC", "mtn momo": "MOMOGHPC",
+  "vodafone cash": "VODAGHPC", "vodafone": "VODAGHPC",
+  "airteltigo": "AIRTGHPC", "airtel tigo": "AIRTGHPC", "tigo": "AIRTGHPC",
+  // Uganda
+  "mtn uganda": "MOMOUGPC", "mtn ug": "MOMOUGPC",
+  "airtel uganda": "AIRTUGPC",
+  // Tanzania
+  "tigo pesa": "TIGOTZPC",
+  "airtel tanzania": "AIRTTZPC",
+  "halopesa": "HALOTZPC",
+  // Malawi
+  "tnm mpamba": "TNMPMWPC", "mpamba": "TNMPMWPC",
+  // Brazil
+  "pix": "PIXKBRPC",
+};
 
-  const countryNameMap: Record<string, string> = {
-    NG: "nigeria", KE: "kenya", GH: "ghana", UG: "uganda",
-    TZ: "tanzania", IN: "india",
-  };
-  const countryName = countryNameMap[country?.toUpperCase()] || "nigeria";
-  const banks: Array<{ name: string; code: string }> = (await offramp.listBanks?.(countryName)) || [];
-  const exact = banks.find((b: { name: string; code: string }) => b.name.toLowerCase() === bankName.toLowerCase());
+// Country code → Paycrest currency code
+const COUNTRY_TO_CURRENCY_CODE: Record<string, string> = {
+  NG: "NGN", KE: "KES", GH: "GHS", UG: "UGX",
+  TZ: "TZS", MW: "MWK", BR: "BRL", BJ: "XOF", CI: "XOF", IN: "INR",
+};
+
+async function resolveBankCode(bankName: string, country = "NG"): Promise<string> {
+  const bankLower = bankName.toLowerCase().trim();
+
+  // Check mobile money shortcuts first (exact or partial match)
+  for (const [keyword, code] of Object.entries(MOBILE_MONEY_CODES)) {
+    if (bankLower.includes(keyword) || keyword.includes(bankLower)) return code;
+  }
+
+  // Fetch real institution list from clova-pay (which proxies Paycrest live API)
+  const currency = COUNTRY_TO_CURRENCY_CODE[country?.toUpperCase()] || "NGN";
+  const banks: Array<{ name: string; code: string }> = (await offramp.listBanks?.(currency)) || [];
+  const exact = banks.find((b) => b.name.toLowerCase() === bankLower);
   if (exact) return exact.code;
-  const fuzzy = banks.find((b: { name: string; code: string }) => fuzzyIncludes(b.name, bankName));
+  const fuzzy = banks.find((b) => fuzzyIncludes(b.name, bankName));
   return fuzzy?.code || "";
 }
 
@@ -263,7 +291,7 @@ chatRouter.post("/message", async (req, res) => {
     }
 
     let verifiedName = details.accountName;
-    const isMobileMoney = bankCode === "MPS" || /mpesa|m-pesa|safaricom|mtn mobile|airtel money|wave|moov/i.test(details.bankName);
+    const isMobileMoney = bankCode === "SAFAKEPC" || /mpesa|m-pesa|safaricom|mtn mobile|airtel money|wave|moov/i.test(details.bankName);
     if (!isMobileMoney) {
       try {
         const vr = await offramp.verifyRecipient?.({
@@ -580,11 +608,10 @@ chatRouter.post("/message", async (req, res) => {
           ],
           [
             { text: "🇹🇿 Tanzania (TZS)", callbackData: `cashout_country:TZ:${intent.amount}:${intent.token}` },
-            { text: "🇮🇳 India (INR)", callbackData: `cashout_country:IN:${intent.amount}:${intent.token}` },
+            { text: "🇲🇼 Malawi (MWK)", callbackData: `cashout_country:MW:${intent.amount}:${intent.token}` },
           ],
           [
             { text: "🇧🇷 Brazil (BRL)", callbackData: `cashout_country:BR:${intent.amount}:${intent.token}` },
-            { text: "🌍 West Africa (XOF)", callbackData: `cashout_country:BJ:${intent.amount}:${intent.token}` },
           ],
         ],
       });
