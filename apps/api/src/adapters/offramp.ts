@@ -130,7 +130,7 @@ export class MockOfframpProvider implements OfframpProvider {
   async quote(input: CashoutQuoteRequest): Promise<CashoutQuoteResponse> {
     const amount = Number(input.amount);
     const fee = Math.max(0.5, amount * 0.02);
-    const mockRateByCurrency: Record<string, number> = { NGN: 1520, KES: 128, GHS: 15.5, ZAR: 18.9 };
+    const mockRateByCurrency: Record<string, number> = { NGN: 1520, KES: 128, GHS: 15.5, UGX: 3700, TZS: 2600, MWK: 1700, BRL: 5.1, XOF: 610, INR: 84 };
     const rate = mockRateByCurrency[input.currency] ?? 100;
     const receiveAmount = amount * rate - fee * rate;
 
@@ -223,8 +223,8 @@ export class LiveOfframpProvider implements OfframpProvider {
     if (offrampConfig.provider === "clova") {
       try {
         // clova-pay-africa uses Paycrest — query by currency, not country code
-        // Map country code to currency (currently only NGN supported)
-        const currencyMap: Record<string, string> = { NG: "NGN", KE: "KES", GH: "GHS", ZA: "ZAR" };
+        // Map country code to currency
+        const currencyMap: Record<string, string> = { NG: "NGN", KE: "KES", GH: "GHS", UG: "UGX", TZ: "TZS", MW: "MWK", BR: "BRL", BJ: "XOF", CI: "XOF", IN: "INR" };
         const currency = currencyMap[country.toUpperCase()] || "NGN";
         const data = await offrampRequest(`/v1/banks?currency=${encodeURIComponent(currency)}`, "GET");
         // clova-pay-africa returns { currency, institutions: [{name, code}] }
@@ -248,7 +248,7 @@ export class LiveOfframpProvider implements OfframpProvider {
       const data = await offrampRequest("/v1/quotes", "POST", {
         asset,
         amountCrypto: input.amount,
-        destinationCurrency: "NGN",
+        destinationCurrency: input.currency,
       });
 
       const quoteId = String(data.quoteId || `cq_${randomUUID()}`);
@@ -261,8 +261,8 @@ export class LiveOfframpProvider implements OfframpProvider {
       return {
         quoteId,
         rate: String(data.rate || "0"),
-        fee: String(data.feeNgn || data.fee || "0"),
-        receiveAmount: String(data.receiveNgn || data.receiveAmount || "0"),
+        fee: String(data.fee || "0"),
+        receiveAmount: String(data.receiveAmount || "0"),
         eta: "Paycrest payout after deposit confirmation",
         expiresAt: Number(data.expiresAt || Date.now() + 5 * 60 * 1000),
       };
@@ -312,7 +312,7 @@ export class LiveOfframpProvider implements OfframpProvider {
         payoutId: String(data.orderId || `ord_${randomUUID()}`),
         status: mapOrderStatus(String(data.status || "awaiting_deposit")),
         depositAddress: String(data.depositAddress || ""),
-        receiveAmount: String(data.receiveNgn || ""),
+        receiveAmount: String(data.receiveAmount || ""),
       };
     }
 

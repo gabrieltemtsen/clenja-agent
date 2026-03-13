@@ -18,7 +18,7 @@ export function toUserFacingProviderError(err: unknown, provider: "para" | "offr
     return `${label} auth is not configured. Set API key or x402 payment header.`;
   }
   if (msg.includes("cashout_token_not_supported_live:CELO")) {
-    return `${label} currently supports cUSD cashout for NGN. Please swap CELO to cUSD first.`;
+    return `${label} currently supports cUSD cashout. Please swap CELO to cUSD first.`;
   }
   if (msg.includes("offramp_beneficiary_missing_for_clova")) {
     return `${label} beneficiary details are incomplete. Configure default NG beneficiary or provide full bank details.`;

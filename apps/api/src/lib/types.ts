@@ -2,8 +2,8 @@ export type CashoutQuoteRequest = {
   userId: string;
   fromToken: "cUSD" | "CELO" | "USDC";
   amount: string;
-  country: "NG" | "KE" | "GH" | "ZA";
-  currency: "NGN" | "KES" | "GHS" | "ZAR";
+  country: "NG" | "KE" | "GH" | "UG" | "TZ" | "MW" | "BR" | "BJ" | "CI" | "IN";
+  currency: "NGN" | "KES" | "GHS" | "UGX" | "TZS" | "MWK" | "BRL" | "XOF" | "INR";
 };
 
 export type CashoutQuoteResponse = {
