@@ -261,8 +261,8 @@ export class LiveOfframpProvider implements OfframpProvider {
       return {
         quoteId,
         rate: String(data.rate || "0"),
-        fee: String(data.fee || "0"),
-        receiveAmount: String(data.receiveAmount || "0"),
+        fee: String(data.feeFiat || data.fee || "0"),
+        receiveAmount: String(data.receiveFiat || data.receiveAmount || "0"),
         eta: "Paycrest payout after deposit confirmation",
         expiresAt: Number(data.expiresAt || Date.now() + 5 * 60 * 1000),
       };
@@ -273,8 +273,8 @@ export class LiveOfframpProvider implements OfframpProvider {
       return {
         quoteId: String(data.quoteId || `oq_${randomUUID()}`),
         rate: String(data.rate || "0"),
-        fee: String(data.fee || "0"),
-        receiveAmount: String(data.receiveAmount || "0"),
+        fee: String(data.feeFiat || data.fee || "0"),
+        receiveAmount: String(data.receiveFiat || data.receiveAmount || "0"),
         eta: String(data.eta || "5-30 min"),
       };
     } catch (e) {
@@ -312,7 +312,7 @@ export class LiveOfframpProvider implements OfframpProvider {
         payoutId: String(data.orderId || `ord_${randomUUID()}`),
         status: mapOrderStatus(String(data.status || "awaiting_deposit")),
         depositAddress: String(data.depositAddress || ""),
-        receiveAmount: String(data.receiveAmount || ""),
+        receiveAmount: String(data.receiveFiat || data.receiveAmount || ""),
       };
     }
 

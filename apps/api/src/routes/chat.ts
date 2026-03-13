@@ -222,14 +222,16 @@ chatRouter.post("/message", async (req, res) => {
       });
 
       const exampleByCountry: Record<string, string> = {
-        NG: "0123456789 Access Bank",
-        KE: "254797872622 MPESA",
-        GH: "0241234567 MTN",
-        UG: "256712345678 MTN Uganda",
-        TZ: "255712345678 Vodacom",
-        IN: "9876543210 HDFC Bank",
-        BR: "12345678901 Nubank",
-        BJ: "22961234567 Moov",
+        NG: "0812345678 Access Bank",
+        KE: "254712345678 MPESA",
+        GH: "0244567890 MTN Mobile Money",
+        UG: "256701234567 MTN Uganda",
+        TZ: "255621234567 Vodacom Tanzania",
+        IN: "9845612370 HDFC Bank",
+        BR: "11987654321 Nubank",
+        BJ: "22961234567 Moov Benin",
+        CI: "22507890123 Wave",
+        MW: "265881234567 Airtel Malawi",
       };
       const example = exampleByCountry[country] || "<account_number> <bank name>";
 
@@ -251,7 +253,7 @@ chatRouter.post("/message", async (req, res) => {
 
     const details = parseCashoutBankDetails(text);
     if (!details) {
-      return res.json({ reply: "Please send bank details like: 0123456789 Access Bank (or: bank: Access Bank, account number: 0123456789, account name: Gabriel)." });
+      return res.json({ reply: "Please send bank details in one line.\nExamples:\n• Nigeria: 0812345678 Access Bank\n• Kenya: 254712345678 MPESA\n• Ghana: 0244567890 MTN Mobile Money" });
     }
 
     const detectedCountry = pending.payload.country || detectCountryFromInput(details.accountNumber, details.bankName);
@@ -261,18 +263,24 @@ chatRouter.post("/message", async (req, res) => {
     }
 
     let verifiedName = details.accountName;
-    try {
-      const vr = await offramp.verifyRecipient?.({
-        accountNumber: details.accountNumber,
-        bankCode,
-        accountName: details.accountName,
-      });
-      if (vr && !vr.verified) {
-        return res.json({ reply: "I couldn't verify that bank account. Please double-check account number and bank name." });
+    const isMobileMoney = bankCode === "MPS" || /mpesa|m-pesa|safaricom|mtn mobile|airtel money|wave|moov/i.test(details.bankName);
+    if (!isMobileMoney) {
+      try {
+        const vr = await offramp.verifyRecipient?.({
+          accountNumber: details.accountNumber,
+          bankCode,
+          accountName: details.accountName,
+        });
+        if (offrampConfig.mode === "live" && vr && !vr.verified) {
+          return res.json({ reply: "I couldn't verify that bank account. Please double-check account number and bank name." });
+        }
+        verifiedName = vr?.accountName || details.accountName;
+      } catch {
+        // skip verification errors in mock mode; fail loudly in live
+        if (offrampConfig.mode === "live") {
+          return res.json({ reply: "Bank account verification failed. Please re-check details and try again." });
+        }
       }
-      verifiedName = vr?.accountName || details.accountName;
-    } catch {
-      return res.json({ reply: "Bank account verification failed. Please re-check details and try again." });
     }
 
     const otp = "123456";
