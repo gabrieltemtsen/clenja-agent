@@ -80,7 +80,7 @@ async function offrampRequest(path: string, method: "POST" | "GET", body?: unkno
   }
 }
 
-const clovaQuoteCache = new Map<string, { amountCrypto: string; asset: "cUSD_CELO" | "USDC_BASE" | "USDCX_STACKS"; createdAt: number }>();
+const clovaQuoteCache = new Map<string, { amountCrypto: string; asset: "cUSD_CELO" | "USDC_BASE" | "USDCX_STACKS"; currency: string; createdAt: number }>();
 
 function mapTokenToAsset(token: "cUSD" | "CELO" | "USDC") {
   if (token === "cUSD") return "cUSD_CELO" as const;
@@ -255,6 +255,7 @@ export class LiveOfframpProvider implements OfframpProvider {
       clovaQuoteCache.set(quoteId, {
         amountCrypto: input.amount,
         asset,
+        currency: input.currency || "NGN",
         createdAt: Date.now(),
       });
 
@@ -300,6 +301,7 @@ export class LiveOfframpProvider implements OfframpProvider {
       const data = await offrampRequest("/v1/orders", "POST", {
         asset: cached.asset,
         amountCrypto: cached.amountCrypto,
+        destinationCurrency: cached.currency || "NGN",
         recipient: {
           accountName: beneficiary.accountName,
           accountNumber: beneficiary.accountNumber,
