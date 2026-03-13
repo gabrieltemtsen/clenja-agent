@@ -87,6 +87,14 @@ function humanizeCashoutStatus(status: string) {
   return status;
 }
 
+function formatExpiry(expiresAt?: number): string {
+  if (!expiresAt) return "";
+  const diffMs = expiresAt - Date.now();
+  if (diffMs <= 0) return " (expired)";
+  const mins = Math.ceil(diffMs / 60000);
+  return ` · Quote valid for ${mins} min`;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -185,6 +193,56 @@ chatRouter.post("/message", async (req, res) => {
     }
   }
 
+  // Handle cashout country callback (forwarded from Telegram inline button tap)
+  if (text.startsWith("cashout_country:")) {
+    const parts = text.split(":");
+    const country = parts[1];
+    const amount = parts[2];
+    const token = parts[3];
+
+    if (!country || !amount || !token) {
+      return res.json({ reply: "Invalid country selection. Please try the cashout command again." });
+    }
+
+    const currency = currencyForCountry(country);
+    try {
+      const quote = await offramp.quote({
+        userId,
+        fromToken: token as "cUSD" | "CELO",
+        amount,
+        country: country as any,
+        currency: currency as any,
+      });
+
+      store.setPendingAction(userId, "cashout_bank_details", {
+        quoteId: quote.quoteId,
+        amount,
+        token,
+        country,
+      });
+
+      const exampleByCountry: Record<string, string> = {
+        NG: "0123456789 Access Bank",
+        KE: "254797872622 MPESA",
+        GH: "0241234567 MTN",
+        UG: "256712345678 MTN Uganda",
+        TZ: "255712345678 Vodacom",
+        IN: "9876543210 HDFC Bank",
+        BR: "12345678901 Nubank",
+        BJ: "22961234567 Moov",
+      };
+      const example = exampleByCountry[country] || "<account_number> <bank name>";
+
+      return res.json({
+        reply: `You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${currency}${formatExpiry(quote.expiresAt)}\n\nNow send your bank details in one line:\n• Example: ${example}`,
+        quote,
+        action: "awaiting_bank_details",
+      });
+    } catch (e) {
+      return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
+    }
+  }
+
   if (pending?.kind === "cashout_bank_details") {
     if (/^(cancel|stop|nevermind)$/i.test(text.trim())) {
       store.clearPendingAction(userId);
@@ -196,7 +254,7 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: "Please send bank details like: 0123456789 Access Bank (or: bank: Access Bank, account number: 0123456789, account name: Gabriel)." });
     }
 
-    const detectedCountry = detectCountryFromInput(details.accountNumber, details.bankName);
+    const detectedCountry = pending.payload.country || detectCountryFromInput(details.accountNumber, details.bankName);
     const bankCode = await resolveBankCode(details.bankName, detectedCountry);
     if (!bankCode) {
       return res.json({ reply: `I couldn't resolve bank code for '${details.bankName}'. Please send the exact bank name (e.g. Access Bank, UBA, Zenith Bank).` });
@@ -498,28 +556,39 @@ chatRouter.post("/message", async (req, res) => {
       }
     }
 
+    // No saved beneficiary: ask for destination country first with inline keyboard
+    if (!beneficiary) {
+      return res.json({
+        reply: "💸 Where are you sending cash to?",
+        action: "cashout_country_select",
+        inlineKeyboard: [
+          [
+            { text: "🇳🇬 Nigeria (NGN)", callbackData: `cashout_country:NG:${intent.amount}:${intent.token}` },
+            { text: "🇰🇪 Kenya (KES)", callbackData: `cashout_country:KE:${intent.amount}:${intent.token}` },
+          ],
+          [
+            { text: "🇬🇭 Ghana (GHS)", callbackData: `cashout_country:GH:${intent.amount}:${intent.token}` },
+            { text: "🇺🇬 Uganda (UGX)", callbackData: `cashout_country:UG:${intent.amount}:${intent.token}` },
+          ],
+          [
+            { text: "🇹🇿 Tanzania (TZS)", callbackData: `cashout_country:TZ:${intent.amount}:${intent.token}` },
+            { text: "🇮🇳 India (INR)", callbackData: `cashout_country:IN:${intent.amount}:${intent.token}` },
+          ],
+          [
+            { text: "🇧🇷 Brazil (BRL)", callbackData: `cashout_country:BR:${intent.amount}:${intent.token}` },
+            { text: "🌍 West Africa (XOF)", callbackData: `cashout_country:BJ:${intent.amount}:${intent.token}` },
+          ],
+        ],
+      });
+    }
+
     try {
-      const cashoutCountry = (beneficiary?.country || "NG") as any;
+      const cashoutCountry = beneficiary.country as any;
       const cashoutCurrency = currencyForCountry(cashoutCountry);
       const quote = await offramp.quote({ userId, fromToken: intent.token as "cUSD" | "CELO", amount: intent.amount, country: cashoutCountry, currency: cashoutCurrency as any });
-      const expiry = quote.expiresAt ? ` Expires: ${new Date(quote.expiresAt).toISOString()}.` : "";
-
-      if (!beneficiary) {
-        store.setPendingAction(userId, "cashout_bank_details", {
-          quoteId: quote.quoteId,
-          amount: intent.amount,
-          token: intent.token,
-        });
-        return res.json({
-          reply: `Cashout quote is ready 💸 You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${cashoutCurrency}.${expiry}\nNow send bank details in one line: <account_number> <bank name>\nExamples:\n• Nigeria: 0123456789 Access Bank\n• Kenya: 254797872622 MPESA`,
-          quote,
-          action: "awaiting_bank_details",
-        });
-      }
-
       const otp = "123456";
       const ch = createChallenge({ userId, type: "cashout_otp", expected: otp, context: { kind: "cashout", quoteId: quote.quoteId, amount: intent.amount, token: intent.token, beneficiary } });
-      return res.json({ reply: `Cashout quote is ready 💸 You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${cashoutCurrency}.${expiry} Reply with OTP 123456 to continue.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
+      return res.json({ reply: `Cashout quote is ready 💸 You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${cashoutCurrency}${formatExpiry(quote.expiresAt)}. Reply with OTP 123456 to continue.`, quote, challengeId: ch.id, action: "awaiting_confirmation" });
     } catch (e) {
       return res.status(502).json({ reply: toUserFacingProviderError(e, "offramp") });
     }
