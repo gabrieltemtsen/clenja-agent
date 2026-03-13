@@ -573,11 +573,6 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: "For cashout, CELO must be swapped to cUSD first. Try: swap <amount> CELO to cUSD, then cashout <amount> cUSD." });
     }
 
-    // ── Minimum amount guard ── Paycrest requires at least $1
-    if (Number(intent.amount) < 1) {
-      return res.json({ reply: `⚠️ Minimum cashout is 1 cUSD. You requested ${intent.amount} cUSD.` });
-    }
-
     // ── Balance check ── confirm user has enough before proceeding
     try {
       const balData = await wallet.getBalance(userId);
@@ -734,7 +729,7 @@ chatRouter.post("/confirm", async (req, res) => {
         store.clearPendingAction(userId);
         // Surface friendly message for known Paycrest rejection reasons
         if (errMsg.includes("no provider available") || errMsg.includes("no_provider_available")) {
-          return res.json({ reply: `❌ No liquidity provider available for this corridor/amount right now.\n\nTry a larger amount (minimum 1 cUSD) or try again in a few minutes.` });
+          return res.json({ reply: `❌ No liquidity provider available for this corridor/amount right now.\n\nTry a different amount or try again in a few minutes.` });
         }
         if (errMsg.includes("Rate validation failed")) {
           return res.json({ reply: `❌ Rate expired or invalid. Please start a new cashout to get a fresh quote.` });
