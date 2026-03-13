@@ -156,6 +156,28 @@ async function handleUpdate(update) {
     const messageId = cq.message?.message_id;
     const current = tradeUiState.get(userId) || { amount: "1", slippage: 1 };
 
+    // Handle cashout country selection callbacks
+    if (data.startsWith("cashout_country:")) {
+      await tg("answerCallbackQuery", { callback_query_id: cq.id });
+      try {
+        const result = await apiCall("/v1/chat/message", { userId, text: data });
+        if (result.data?.reply) {
+          const msgPayload = { chat_id: chatId, text: result.data.reply };
+          if (result.data.inlineKeyboard) {
+            msgPayload.reply_markup = {
+              inline_keyboard: result.data.inlineKeyboard.map((row) =>
+                row.map((btn) => ({ text: btn.text, callback_data: btn.callbackData }))
+              ),
+            };
+          }
+          await tg("sendMessage", msgPayload);
+        }
+      } catch {
+        if (chatId) await tg("sendMessage", { chat_id: chatId, text: "Service error. Please try again." });
+      }
+      return;
+    }
+
     if (data.startsWith("trade_")) {
       await tg("answerCallbackQuery", { callback_query_id: cq.id });
 
@@ -327,7 +349,20 @@ async function handleUpdate(update) {
       return;
     }
 
-    await sendMessage(msg.chat.id, `${reply}${extra}`, msg.message_id, true);
+    if (data.inlineKeyboard) {
+      await tg("sendMessage", {
+        chat_id: msg.chat.id,
+        text: `${reply}${extra}`,
+        ...(msg.message_id ? { reply_parameters: { message_id: msg.message_id } } : {}),
+        reply_markup: {
+          inline_keyboard: data.inlineKeyboard.map((row) =>
+            row.map((btn) => ({ text: btn.text, callback_data: btn.callbackData }))
+          ),
+        },
+      });
+    } else {
+      await sendMessage(msg.chat.id, `${reply}${extra}`, msg.message_id, true);
+    }
   } catch {
     await sendMessage(msg.chat.id, "Service error. Please try again in a moment.", msg.message_id, true);
   }
