@@ -573,6 +573,26 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: "For cashout, CELO must be swapped to cUSD first. Try: swap <amount> CELO to cUSD, then cashout <amount> cUSD." });
     }
 
+    // ── Balance check ── confirm user has enough before proceeding
+    try {
+      const balData = await wallet.getBalance(userId);
+      const token = (intent.token || "cUSD").toUpperCase();
+      const tokenKey = token === "CUSD" ? "cUSD" : token;
+      const balEntry = balData.balances.find((b: any) =>
+        b.token.toUpperCase() === tokenKey.toUpperCase()
+      );
+      const userBalance = Number(balEntry?.amount || "0");
+      const cashoutAmount = Number(intent.amount);
+      if (cashoutAmount > userBalance) {
+        return res.json({
+          reply: `⚠️ Insufficient balance.\n\nYou have *${userBalance.toFixed(4)} ${tokenKey}* but cashout amount is *${cashoutAmount} ${tokenKey}*.\n\nDeposit more ${tokenKey} or try a smaller amount.`,
+        });
+      }
+    } catch (balErr: any) {
+      console.warn("[cashout] balance check failed, proceeding:", balErr.message);
+      // Don't block if balance check fails — Paycrest will reject if funds aren't there
+    }
+
     const pc = checkPolicy({ userId, action: "cashout", amount: Number(intent.amount), token: intent.token as "CELO" | "cUSD" });
     if (!pc.ok) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.blocked", status: "error", detail: { reason: pc.reason } });
@@ -682,7 +702,40 @@ chatRouter.post("/confirm", async (req, res) => {
         accountNumber: offrampConfig.defaultBeneficiary.accountNumber,
         bankCode: offrampConfig.defaultBeneficiary.bankCode,
       };
-      const order = await offramp.create({ userId, quoteId: ctx.quoteId, fromToken: ctx.token, amount: String(ctx.amount), beneficiary, otp: answer });
+      // ── Pre-order balance check ── prevent sending if funds are insufficient
+      try {
+        const preBalData = await wallet.getBalance(userId);
+        const tokenKey = String(ctx.token || "cUSD");
+        const preBalEntry = preBalData.balances.find((b: any) =>
+          b.token.toUpperCase() === tokenKey.toUpperCase()
+        );
+        const preBalance = Number(preBalEntry?.amount || "0");
+        const orderAmount = Number(ctx.amount);
+        if (orderAmount > preBalance) {
+          store.clearPendingAction(userId);
+          return res.json({
+            reply: `⚠️ Insufficient balance.\n\nYou have *${preBalance.toFixed(4)} ${tokenKey}* but cashout requires *${orderAmount} ${tokenKey}*.\n\nDeposit more ${tokenKey} or try a smaller amount.`,
+          });
+        }
+      } catch (preBalErr: any) {
+        console.warn("[cashout-otp] pre-order balance check failed, proceeding:", preBalErr.message);
+      }
+
+      let order: any;
+      try {
+        order = await offramp.create({ userId, quoteId: ctx.quoteId, fromToken: ctx.token, amount: String(ctx.amount), beneficiary, otp: answer });
+      } catch (createErr: any) {
+        const errMsg: string = createErr?.message || String(createErr);
+        store.clearPendingAction(userId);
+        // Surface friendly message for known Paycrest rejection reasons
+        if (errMsg.includes("no provider available") || errMsg.includes("no_provider_available")) {
+          return res.json({ reply: `❌ No liquidity provider available for this corridor/amount right now.\n\nTry a different amount or try again in a few minutes.` });
+        }
+        if (errMsg.includes("Rate validation failed")) {
+          return res.json({ reply: `❌ Rate expired or invalid. Please start a new cashout to get a fresh quote.` });
+        }
+        return res.json({ reply: `❌ Cashout failed: ${errMsg}` });
+      }
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
 
