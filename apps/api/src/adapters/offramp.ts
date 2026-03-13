@@ -66,6 +66,18 @@ async function offrampRequest(path: string, method: "POST" | "GET", body?: unkno
 
     if (!r.ok) {
       if (r.status === 402) throw new Error("offramp_payment_required_402");
+      // Try to read a user-friendly message from the response body before throwing
+      try {
+        const errBody = await r.json();
+        const friendly = errBody?.userMessage || errBody?.detail || errBody?.error;
+        if (friendly && typeof friendly === "string") {
+          throw new Error(`offramp_error: ${friendly}`);
+        }
+      } catch (parseErr: any) {
+        // If the error was thrown inside this try (our own throw), re-throw it
+        if (String(parseErr?.message || "").startsWith("offramp_error:")) throw parseErr;
+        // Otherwise body wasn't JSON — fall through to generic error
+      }
       throw new Error(`offramp_http_${r.status}`);
     }
     const data = await r.json();

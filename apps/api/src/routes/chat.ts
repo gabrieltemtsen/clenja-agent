@@ -734,7 +734,9 @@ chatRouter.post("/confirm", async (req, res) => {
         if (errMsg.includes("Rate validation failed")) {
           return res.json({ reply: `❌ Rate expired or invalid. Please start a new cashout to get a fresh quote.` });
         }
-        return res.json({ reply: `❌ Cashout failed: ${errMsg}` });
+        // Surface the friendly message from the API if available (strips "offramp_error: " prefix)
+        const cleanMsg = errMsg.replace(/^offramp_error:\s*/i, "");
+        return res.json({ reply: `❌ Cashout failed: ${cleanMsg}` });
       }
       recordPolicySpend(userId, Number(ctx.amount));
       store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
