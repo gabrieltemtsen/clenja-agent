@@ -22,12 +22,39 @@ function fuzzyIncludes(a: string, b: string) {
   return aa.includes(bb) || bb.includes(aa);
 }
 
-async function resolveBankCode(bankName: string) {
-  const banks: Array<{ name: string; code: string }> = (await offramp.listBanks?.("nigeria")) || [];
+async function resolveBankCode(bankName: string, country = "NG") {
+  // Special case: M-Pesa is always code "MPS"
+  const bankLower = bankName.toLowerCase();
+  if (/mpesa|m-pesa|m pesa/.test(bankLower)) return "MPS";
+
+  const countryNameMap: Record<string, string> = {
+    NG: "nigeria", KE: "kenya", GH: "ghana", UG: "uganda",
+    TZ: "tanzania", IN: "india",
+  };
+  const countryName = countryNameMap[country?.toUpperCase()] || "nigeria";
+  const banks: Array<{ name: string; code: string }> = (await offramp.listBanks?.(countryName)) || [];
   const exact = banks.find((b: { name: string; code: string }) => b.name.toLowerCase() === bankName.toLowerCase());
   if (exact) return exact.code;
   const fuzzy = banks.find((b: { name: string; code: string }) => fuzzyIncludes(b.name, bankName));
   return fuzzy?.code || "";
+}
+
+function detectCountryFromInput(accountNumber: string, bankName: string): string {
+  const bank = bankName.toLowerCase();
+  if (/mpesa|m-pesa|safaricom/.test(bank)) return "KE";
+  if (/mtn|vodafone|tigo|airtel/.test(bank) && accountNumber.startsWith("233")) return "GH";
+
+  // Phone number prefix detection
+  const prefixMap: Array<[string, string]> = [
+    ["254", "KE"], ["233", "GH"], ["234", "NG"],
+    ["256", "UG"], ["255", "TZ"], ["265", "MW"],
+    ["55", "BR"], ["91", "IN"],
+  ];
+  for (const [prefix, country] of prefixMap) {
+    if (accountNumber.startsWith(prefix)) return country;
+  }
+
+  return "NG"; // default
 }
 
 function formatAmount(value: string | number, maxDp = 4) {
@@ -75,7 +102,7 @@ function currencyForCountry(country: string): string {
 
 function parseCashoutBankDetails(input: string) {
   const t = input.trim();
-  const acctMatch = t.match(/(?:account(?:\s*number)?\s*[:=]?\s*)?(\d{10})/i);
+  const acctMatch = t.match(/(?:account(?:\s*number)?\s*[:=]?\s*)?(\d{7,15})/i);
   if (!acctMatch) return null;
 
   const accountNumber = acctMatch[1];
@@ -169,7 +196,8 @@ chatRouter.post("/message", async (req, res) => {
       return res.json({ reply: "Please send bank details like: 0123456789 Access Bank (or: bank: Access Bank, account number: 0123456789, account name: Gabriel)." });
     }
 
-    const bankCode = await resolveBankCode(details.bankName);
+    const detectedCountry = detectCountryFromInput(details.accountNumber, details.bankName);
+    const bankCode = await resolveBankCode(details.bankName, detectedCountry);
     if (!bankCode) {
       return res.json({ reply: `I couldn't resolve bank code for '${details.bankName}'. Please send the exact bank name (e.g. Access Bank, UBA, Zenith Bank).` });
     }
@@ -200,7 +228,8 @@ chatRouter.post("/message", async (req, res) => {
         amount: pending.payload.amount,
         token: pending.payload.token,
         beneficiary: {
-          country: offrampConfig.defaultBeneficiary.country || "NG",
+          country: detectedCountry,
+          currency: currencyForCountry(detectedCountry),
           bankName: details.bankName,
           accountName: verifiedName,
           accountNumber: details.accountNumber,
@@ -482,7 +511,7 @@ chatRouter.post("/message", async (req, res) => {
           token: intent.token,
         });
         return res.json({
-          reply: `Cashout quote is ready 💸 You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${cashoutCurrency}.${expiry}\nNow send bank details in one line: <account_number> <bank name>\nExample: 0123456789 Access Bank`,
+          reply: `Cashout quote is ready 💸 You'll receive about ${formatAmount(quote.receiveAmount, 2)} ${cashoutCurrency}.${expiry}\nNow send bank details in one line: <account_number> <bank name>\nExamples:\n• Nigeria: 0123456789 Access Bank\n• Kenya: 254797872622 MPESA`,
           quote,
           action: "awaiting_bank_details",
         });
