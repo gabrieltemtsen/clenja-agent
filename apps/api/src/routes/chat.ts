@@ -608,11 +608,10 @@ chatRouter.post("/message", async (req, res) => {
           ],
           [
             { text: "🇹🇿 Tanzania (TZS)", callbackData: `cashout_country:TZ:${intent.amount}:${intent.token}` },
-            { text: "🇮🇳 India (INR)", callbackData: `cashout_country:IN:${intent.amount}:${intent.token}` },
+            { text: "🇲🇼 Malawi (MWK)", callbackData: `cashout_country:MW:${intent.amount}:${intent.token}` },
           ],
           [
             { text: "🇧🇷 Brazil (BRL)", callbackData: `cashout_country:BR:${intent.amount}:${intent.token}` },
-            { text: "🌍 West Africa (XOF)", callbackData: `cashout_country:BJ:${intent.amount}:${intent.token}` },
           ],
         ],
       });
