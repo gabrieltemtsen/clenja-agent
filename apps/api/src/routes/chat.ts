@@ -23,9 +23,9 @@ function fuzzyIncludes(a: string, b: string) {
 }
 
 async function resolveBankCode(bankName: string, country = "NG") {
-  // Special case: M-Pesa is always code "MPS"
+  // Special case: M-Pesa Paycrest institution code (Safaricom Kenya)
   const bankLower = bankName.toLowerCase();
-  if (/mpesa|m-pesa|m pesa/.test(bankLower)) return "MPS";
+  if (/mpesa|m-pesa|m pesa/.test(bankLower)) return "SAFAKEPC";
 
   const countryNameMap: Record<string, string> = {
     NG: "nigeria", KE: "kenya", GH: "ghana", UG: "uganda",
@@ -263,7 +263,7 @@ chatRouter.post("/message", async (req, res) => {
     }
 
     let verifiedName = details.accountName;
-    const isMobileMoney = bankCode === "MPS" || /mpesa|m-pesa|safaricom|mtn mobile|airtel money|wave|moov/i.test(details.bankName);
+    const isMobileMoney = bankCode === "SAFAKEPC" || /mpesa|m-pesa|safaricom|mtn mobile|airtel money|wave|moov/i.test(details.bankName);
     if (!isMobileMoney) {
       try {
         const vr = await offramp.verifyRecipient?.({
