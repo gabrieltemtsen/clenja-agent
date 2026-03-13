@@ -12,8 +12,8 @@ const quoteSchema = z.object({
   userId: z.string(),
   fromToken: z.enum(["cUSD", "CELO", "USDC"]),
   amount: z.string(),
-  country: z.enum(["NG", "KE", "GH", "ZA"]),
-  currency: z.enum(["NGN", "KES", "GHS", "ZAR"]),
+  country: z.enum(["NG", "KE", "GH", "UG", "TZ", "MW", "BR", "BJ", "CI", "IN"]),
+  currency: z.enum(["NGN", "KES", "GHS", "UGX", "TZS", "MWK", "BRL", "XOF", "INR"]),
 });
 
 offrampRouter.post("/quote", requireX402(pricing.offrampQuote), async (req, res) => {
