@@ -8,6 +8,7 @@ import { beneficiariesRouter } from "./routes/beneficiaries.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { readinessRouter } from "./routes/readiness.js";
 import { auditRouter } from "./routes/audit.js";
+import { receiptsViewRouter } from "./routes/receiptsView.js";
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,7 @@ app.use("/v1", auditRouter);
 app.use("/v1/wallet", walletRouter);
 app.use("/v1/offramp", offrampRouter);
 app.use("/v1/chat", chatRouter);
+app.use("/v1", receiptsViewRouter);
 app.use("/v1/beneficiaries", beneficiariesRouter);
 app.use("/v1/dashboard", dashboardRouter);
 
