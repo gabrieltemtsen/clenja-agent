@@ -11,6 +11,7 @@ import { store } from "../lib/store.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 import { toUserFacingProviderError } from "../lib/providerErrors.js";
 import { offrampConfig, turnkeyConfig } from "../lib/config.js";
+import { maybeUploadReceiptJson } from "../lib/receiptStorage.js";
 
 export const chatRouter = Router();
 const wallet = makeWalletProvider();
@@ -199,6 +200,19 @@ chatRouter.post("/message", async (req, res) => {
 
   if (intent.kind === "greeting") {
     return res.json({ reply: "Hey 👋 Ready when you are. Want to check balance, swap, send, or cash out?" });
+  }
+
+  if (intent.kind === "whoami") {
+    const ens = process.env.AGENT_ENS_NAME || "clenja.eth";
+    const deploy = process.env.AGENT_DEPLOYMENT_ID || "";
+    const selfProof = process.env.SELF_PROOF_URL || "";
+    const lines = [
+      `Clenja Verified Agent`,
+      `Identity: ${ens}`,
+      ...(deploy ? [`Deployment: ${deploy}`] : []),
+      ...(selfProof ? [`Self proof: ${selfProof}`] : []),
+    ];
+    return res.json({ reply: lines.join("\n"), ens, deploymentId: deploy || undefined, selfProofUrl: selfProof || undefined });
   }
 
   const pending = store.getPendingAction(userId);
@@ -669,10 +683,37 @@ chatRouter.post("/confirm", async (req, res) => {
     try {
       const tx = await wallet.executeSend({ userId, quoteId: ctx.quoteId, to: ctx.to, token: ctx.token, amount: ctx.amount });
       recordPolicySpend(userId, Number(ctx.amount));
-      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "send", amount: String(ctx.amount), token: String(ctx.token), ref: tx.txHash, createdAt: Date.now() });
-      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash } });
+
+      const policy = getUserPolicy(userId);
+      const receiptPayload = {
+        kind: "send",
+        userId,
+        createdAt: Date.now(),
+        policy,
+        send: { to: ctx.to, token: ctx.token, amount: String(ctx.amount) },
+        tx: { hash: tx.txHash, chain: "celo", explorer: `https://celoscan.io/tx/${tx.txHash}` },
+      };
+
+      const uploaded = await maybeUploadReceiptJson(receiptPayload, `clenja-send-${tx.txHash}.json`).catch(() => null);
+
+      store.addReceipt({
+        id: `rcpt_${Date.now()}`,
+        userId,
+        kind: "send",
+        amount: String(ctx.amount),
+        token: String(ctx.token),
+        ref: tx.txHash,
+        createdAt: Date.now(),
+        receiptCid: uploaded?.cid,
+        receiptUrl: uploaded?.url,
+        storageProvider: uploaded?.provider,
+        meta: { to: ctx.to, policy },
+      });
+
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "ok", detail: { txHash: tx.txHash, receiptCid: uploaded?.cid } });
       const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
-      return res.json({ reply: `Done ✅ Sent ${formatAmount(ctx.amount, 4)} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${txUrl}`, txHash: tx.txHash, txUrl });
+      const receiptLine = uploaded?.url ? `\nReceipt: ${uploaded.url}` : "";
+      return res.json({ reply: `Done ✅ Sent ${formatAmount(ctx.amount, 4)} ${ctx.token} to ${ctx.to.slice(0, 6)}...${ctx.to.slice(-4)}.\nTx: ${txUrl}${receiptLine}`, txHash: tx.txHash, txUrl, receiptUrl: uploaded?.url, receiptCid: uploaded?.cid });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.send.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
@@ -683,10 +724,37 @@ chatRouter.post("/confirm", async (req, res) => {
     try {
       const tx = await wallet.executeSwap({ userId, quoteId: ctx.quoteId, fromToken: ctx.fromToken, toToken: ctx.toToken, amountIn: ctx.amountIn, minAmountOut: ctx.minAmountOut });
       recordPolicySpend(userId, Number(ctx.amountIn));
-      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "swap", amount: String(ctx.amountIn), token: `${ctx.fromToken}->${ctx.toToken}`, ref: tx.txHash, createdAt: Date.now() });
-      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "ok", detail: { txHash: tx.txHash } });
+
+      const policy = getUserPolicy(userId);
+      const receiptPayload = {
+        kind: "swap",
+        userId,
+        createdAt: Date.now(),
+        policy,
+        swap: { fromToken: ctx.fromToken, toToken: ctx.toToken, amountIn: String(ctx.amountIn), minAmountOut: String(ctx.minAmountOut ?? "") },
+        tx: { hash: tx.txHash, chain: "celo", explorer: `https://celoscan.io/tx/${tx.txHash}` },
+      };
+
+      const uploaded = await maybeUploadReceiptJson(receiptPayload, `clenja-swap-${tx.txHash}.json`).catch(() => null);
+
+      store.addReceipt({
+        id: `rcpt_${Date.now()}`,
+        userId,
+        kind: "swap",
+        amount: String(ctx.amountIn),
+        token: `${ctx.fromToken}->${ctx.toToken}`,
+        ref: tx.txHash,
+        createdAt: Date.now(),
+        receiptCid: uploaded?.cid,
+        receiptUrl: uploaded?.url,
+        storageProvider: uploaded?.provider,
+        meta: { policy },
+      });
+
+      store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "ok", detail: { txHash: tx.txHash, receiptCid: uploaded?.cid } });
       const txUrl = `https://celoscan.io/tx/${tx.txHash}`;
-      return res.json({ reply: `Swap complete ✅ ${formatAmount(ctx.amountIn, 4)} ${ctx.fromToken} → ${ctx.toToken}.\nTx: ${txUrl}`, txHash: tx.txHash, txUrl });
+      const receiptLine = uploaded?.url ? `\nReceipt: ${uploaded.url}` : "";
+      return res.json({ reply: `Swap complete ✅ ${formatAmount(ctx.amountIn, 4)} ${ctx.fromToken} → ${ctx.toToken}.\nTx: ${txUrl}${receiptLine}`, txHash: tx.txHash, txUrl, receiptUrl: uploaded?.url, receiptCid: uploaded?.cid });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
       return res.status(502).json({ reply: toUserFacingProviderError(e, "wallet") });
@@ -737,7 +805,6 @@ chatRouter.post("/confirm", async (req, res) => {
         return res.json({ reply: `❌ Cashout failed: ${errMsg}` });
       }
       recordPolicySpend(userId, Number(ctx.amount));
-      store.addReceipt({ id: `rcpt_${Date.now()}`, userId, kind: "cashout", amount: String(ctx.amount), token: String(ctx.token), ref: order.payoutId, createdAt: Date.now() });
 
       let depositTxHash: string | undefined;
       let watcherStatus = "not_sent";
@@ -794,9 +861,53 @@ chatRouter.post("/confirm", async (req, res) => {
       });
 
       const beneficiaryCurrency = currencyForCountry(beneficiary?.country || "NG");
+
+      const policy = getUserPolicy(userId);
+      const receiptPayload = {
+        kind: "cashout",
+        userId,
+        createdAt: Date.now(),
+        policy,
+        cashout: {
+          payoutId: order.payoutId,
+          amount: String(ctx.amount),
+          token: String(ctx.token),
+          beneficiary: {
+            country: beneficiary?.country,
+            bankName: beneficiary?.bankName,
+            accountName: beneficiary?.accountName,
+            accountNumberLast4: String(beneficiary?.accountNumber || "").slice(-4),
+          },
+          receiveAmount: order.receiveAmount,
+          currency: beneficiaryCurrency,
+          status: refreshedStatusText,
+          watcherStatus,
+        },
+        onchainDeposit: depositTxHash
+          ? { chain: "celo", txHash: depositTxHash, explorer: `https://celoscan.io/tx/${depositTxHash}` }
+          : undefined,
+      };
+
+      const uploaded = await maybeUploadReceiptJson(receiptPayload, `clenja-cashout-${order.payoutId}.json`).catch(() => null);
+
+      store.addReceipt({
+        id: `rcpt_${Date.now()}`,
+        userId,
+        kind: "cashout",
+        amount: String(ctx.amount),
+        token: String(ctx.token),
+        ref: order.payoutId,
+        createdAt: Date.now(),
+        receiptCid: uploaded?.cid,
+        receiptUrl: uploaded?.url,
+        storageProvider: uploaded?.provider,
+        meta: { policy, depositTxHash, status: refreshedStatusText },
+      });
+
       const receiveLine = order.receiveAmount ? `\nExpected receive: ${order.receiveAmount} ${beneficiaryCurrency}` : "";
       const depositLine = depositTxHash ? `\nDeposit sent: https://celoscan.io/tx/${depositTxHash}` : "";
       const watcherLine = watcherStatus && watcherStatus !== "watcher_accepted" ? `\nSettlement sync: ${watcherStatus}` : "";
+      const receiptLine = uploaded?.url ? `\nReceipt: ${uploaded.url}` : "";
       const trackLine = `\nTrack with: cashout status ${order.payoutId}`;
       const userStatus = refreshedStatusText === "awaiting_deposit"
         ? "processing - deposit is still being verified"
@@ -809,10 +920,12 @@ chatRouter.post("/confirm", async (req, res) => {
             ? "❌ Cashout failed"
             : "⏳ Cashout is processing";
       return res.json({
-        reply: `${headline}. Order: ${order.payoutId}\nStatus: ${userStatus}${receiveLine}${depositLine}${watcherLine}${trackLine}`,
+        reply: `${headline}. Order: ${order.payoutId}\nStatus: ${userStatus}${receiveLine}${depositLine}${watcherLine}${receiptLine}${trackLine}`,
         payoutId: order.payoutId,
         depositAddress: order.depositAddress,
         depositTxHash,
+        receiptUrl: uploaded?.url,
+        receiptCid: uploaded?.cid,
       });
     } catch (e) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.cashout.execute", status: "error", detail: { error: String((e as any)?.message || e) } });
