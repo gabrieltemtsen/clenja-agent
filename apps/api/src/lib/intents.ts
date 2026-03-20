@@ -4,6 +4,7 @@ export type Intent =
   | { kind: "status" }
   | { kind: "help" }
   | { kind: "address" }
+  | { kind: "whoami" }
   | { kind: "greeting" }
   | { kind: "sendability_check" }
   | { kind: "list_recipients" }
@@ -100,6 +101,7 @@ export function parseIntent(text: string): Intent {
     return { kind: "send_to_recipient", amount: sn[2], token: normalizeToken(sn[3]), recipientName: sn[4].trim() };
   }
 
+  if (/whoami|who am i|verify agent|agent identity|proof of agent|agent proof/i.test(c)) return { kind: "whoami" };
   if (/address|wallet address|my address/i.test(c)) return { kind: "address" };
   if (/do i have enough celo|enough celo to send|can i send/i.test(c)) return { kind: "sendability_check" };
 
