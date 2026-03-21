@@ -81,6 +81,9 @@ type UserPolicyConfig = {
   userId: string;
   dailyLimitUsd: number;
   perTxLimitUsd: number;
+  // Higher limit for swaps (so policy doesn't block large swap intents).
+  // Optional for backward compatibility with existing stored DB rows.
+  swapPerTxLimitUsd?: number;
   paused: boolean;
   updatedAt: number;
 };
@@ -262,7 +265,7 @@ export const store = {
   upsertUserPolicy(userId: string, patch: Partial<Omit<UserPolicyConfig, "userId">>) {
     const db = readDb();
     const i = db.userPolicies.findIndex((p) => p.userId === userId);
-    const base: UserPolicyConfig = i >= 0 ? db.userPolicies[i] : { userId, dailyLimitUsd: 200, perTxLimitUsd: 50, paused: false, updatedAt: Date.now() };
+    const base: UserPolicyConfig = i >= 0 ? db.userPolicies[i] : { userId, dailyLimitUsd: 200, perTxLimitUsd: 50, swapPerTxLimitUsd: 200, paused: false, updatedAt: Date.now() };
     const next: UserPolicyConfig = { ...base, ...patch, userId, updatedAt: Date.now() };
     if (i >= 0) db.userPolicies[i] = next; else db.userPolicies.unshift(next);
     db.userPolicies = db.userPolicies.slice(0, 10000);
