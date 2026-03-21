@@ -508,7 +508,7 @@ chatRouter.post("/message", async (req, res) => {
   if (intent.kind === "swap") {
     if (intent.fromToken === intent.toToken) return res.json({ reply: "From and to token are the same. Try CELO -> cUSD or cUSD -> CELO." });
 
-    const pc = checkPolicy({ userId, action: "send", amount: Number(intent.amount), token: intent.fromToken as "CELO" | "cUSD" });
+    const pc = checkPolicy({ userId, action: "swap", amount: Number(intent.amount), token: intent.fromToken as "CELO" | "cUSD" });
     if (!pc.ok) {
       store.addAudit({ id: `aud_${Date.now()}`, ts: Date.now(), userId, action: "chat.swap.blocked", status: "error", detail: { reason: pc.reason } });
       return res.json({ reply: `Blocked by policy: ${pc.reason}` });
