@@ -10,15 +10,8 @@ type Receipt = {
   kind: "send" | "cashout" | "swap";
   amount: string;
   token: string;
-  /** tx hash for send/swap, payoutId for cashout */
   ref: string;
   createdAt: number;
-  /** Optional decentralized storage receipt */
-  receiptCid?: string;
-  receiptUrl?: string;
-  storageProvider?: "web3.storage" | "lighthouse" | "nft.storage" | "unknown";
-  /** Extra metadata for audit (kept small) */
-  meta?: Record<string, unknown>;
 };
 
 type Beneficiary = {

@@ -19,7 +19,7 @@ const COMMAND_KEYBOARD = {
     [{ text: "👥 Recipients" }, { text: "📒 History" }],
     [{ text: "💸 Send" }, { text: "🔄 Swap" }],
     [{ text: "🏧 Cashout" }, { text: "⚙️ Limits" }],
-    [{ text: "🪪 Verify" }, { text: "❓ Help" }],
+    [{ text: "❓ Help" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -100,9 +100,7 @@ function normalizeUiCommand(text) {
   if (plain === "history") return "history";
   if (plain === "recipients") return "list recipients";
   if (plain === "cashout") return "cashout 50 cUSD";
-  if (plain === "verify") return "whoami";
   if (plain === "help") return "/help";
-  if (plain === "verify") return "whoami";
   if (plain === "send") return "send 1 CELO to 0x...";
   if (plain === "swap") return "/trade";
   if (plain === "limits") return "show limits";
