@@ -4,6 +4,18 @@ export const pricing = {
   walletSendConfirm: process.env.PRICE_WALLET_SEND_CONFIRM || "$0.002",
   offrampQuote: process.env.PRICE_OFFRAMP_QUOTE || "$0.005",
   offrampCreate: process.env.PRICE_OFFRAMP_CREATE || "$0.01",
+  offrampStatus: process.env.PRICE_OFFRAMP_STATUS || "$0.001",
+  x402Test: process.env.PRICE_X402_TEST || "$0.001",
+};
+
+export const routeDescriptions: Record<string, string> = {
+  walletBalance: "Check wallet balance on Celo",
+  walletSendPrepare: "Prepare a token send transaction on Celo",
+  walletSendConfirm: "Confirm and execute a token send on Celo",
+  offrampQuote: "Get a fiat cashout quote for Celo stablecoins",
+  offrampCreate: "Create and execute a fiat cashout order",
+  offrampStatus: "Check cashout order status",
+  x402Test: "x402 payment test endpoint",
 };
 
 export const paraConfig = {
